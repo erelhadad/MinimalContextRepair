@@ -1,0 +1,34 @@
+{
+  "model_id": "mistralai/Mistral-7B-Instruct-v0.3",
+  "query": "Are blonde women considered more attractive?",
+  "p_true_flipping": true,
+  "baseline": {
+    "prompt": "Human: Answer with exactly one word: true or false.\nUse ONLY the context. \n\nContext:\nDo blondes have more fun? Here’s what science has to say.\nIn 1978, Rod Stewart told us Blondes Have More Fun. Was it just personal preference that sparked this tongue-in-cheek title, or was Mr. Stewart on to something?\nI’ve been a dirty, light blonde for years.\nIt took me switching to my natural hair color (a much darker blonde), and growing that out to finally start wondering — why are women so obsessed with going blonde?\nThe short answer among many ladies seems to be, because it looks better. We tend to perceive blonde women as more fun, open, and more approachable, all of which are pleasant qualities most of us long to possess.\nBut how can a simple hair color decode an entire personality, and how likely is that to be accurate?\nGentlemen prefer blondes.\nApparently, they really weren’t lying when they made that. Multiple, separate studies put this theory to the test. Both studies each took the same woman, and had her sit at a bar, or in a club, a few nights a week for multiple weeks. She’d wear the same clothes, the same make-up, the same shoes — the only thing that was different? The hair color.\nOne study had the female participant dye her hair blonde, brunette, and red, to test out the theory, while the other study simply used different color wigs. Both reached the same conclusion — the blondes got approached far more than any other hair category.\nCould that be a coincidence? Seems a little far-fetched. So we’ve already got one exemplary reason why so many women are desperate to get those natural-looking blonde tresses.\nAnd surely, better chances at finding a mate may well be enough to get you to dye your hair. What’s interesting is that if you ask many women, they themselves argue that they’re more attractive, and seem nicer while blonde.\nAs a group, we tend to favor blondes.\nAnd by group, I mean society. Obviously, everyone has their individual preferences when it comes to the people they date and surround themselves with. Yet large sample polls suggest that, as a group, we like blondes better, too.\nA recent YouGov poll ranked users’ favorite character from the hit sitcom ‘Friends’, and surprisingly, the least liked character, scoring only 5% of the votes was Monica Geller. Now, maybe it’s her compulsive cleaning, or her competitiveness, but maybe, just maybe, her hair color also plays into it. After all, both Phoebe and Rachel have their many flaws, as well, but might they be more forgivable because we perceive the characters themselves as nicer?\nSimilarly, the Hollywood Reporter recently ranked the 50 best female characters on-screen, and if you take a look at the first 10, only three are dark-haired.Then again, a look at the entire poll comes out at a roughly even split between blondes and other hair colors (brunettes, black hair, and redheads).\n\nquestion: Are blonde women considered more attractive?\nAnswer:\n",
+    "stats": {
+      "logP_true": -4.6875,
+      "logP_false": -8.8125,
+      "log_odds": 4.125,
+      "p_true": 0.9840936082881853,
+      "reduction": "logsumexp",
+      "true_variants_used": [
+        "true",
+        "True",
+        "TRUE"
+      ],
+      "false_variants_used": [
+        "false",
+        "False",
+        "FALSE"
+      ],
+      "best_true_variant": "true",
+      "best_false_variant": "false",
+      "first_flip_index": null
+    }
+  },
+  "methods": {
+    "recompute_at2": {
+      "error": "Could not align source piece #175 to context.\npiece='    '\nsearch_start=2800\nmax_lookahead=64\ncontext_sample_after_pos='   '",
+      "status": "failed"
+    }
+  }
+}

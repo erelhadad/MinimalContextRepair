@@ -1,0 +1,34 @@
+{
+  "model_id": "mistralai/Mistral-7B-Instruct-v0.3",
+  "query": "Are most people prefer summer over winter?",
+  "p_true_flipping": false,
+  "baseline": {
+    "prompt": "Human: Answer with exactly one word: true or false.\nUse ONLY the context. \n\nContext:\nWeird, I know, but while many people dread the end of daylight saving time and the “fall back” to standard time, and do so year after year, I go to sleep knowing that I am entering my dark, gloomy, icy-cold prime.\nDon’t get me wrong, I love the summer. I just don’t hate the winter, and actually find myself thriving while many of those around me are just trying to survive, through no fault of their own.\nDecades of evidence suggest that shorter, darker days are associated with chemical changes in the brain that can cause people to feel lethargic, withdraw socially, and lose interest in enjoyable activities. It's commonly referred to as the “winter blues,” but there’s also a more serious, diagnosable condition called seasonal affective disorder, or SAD, which is a type of major depression.\nI will admit that the chilly season isn’t perfect. I can’t stand how long it takes to put on all my layers, how cold the car feels in the morning, and how runny my nose gets after being outside for just two minutes. I don’t even enjoy winter activities like skating or skiing. (Those ski resort vibes though are impeccable.)\nBut for some reason that I, and some experts who study seasonal well-being, cannot confidently explain, I’m able to look past all that. Instead, it’s the hoodies and sweatpants, dimmed lighting, pine-scented candles, refreshing bites of cold air, warm drinks, pumpkin spice–flavored foods, bonfires, fluffy scarves, and beauty of snow that provide me with the comforting warmth the actual weather does not.\nIn 2014, Leibowitz moved to Tromsø, Norway, an island of 70,000 people more than 200 miles north of the Arctic Circle, to study how residents coped with the long winters, two months of which are spent in complete darkness because the sun never rises above the horizon.\nHer study, published in 2020 in the International Journal of Wellbeing, found that the more positive mindset people had about winter, the happier and more satisfied they were with the season. Leibowitz also found that people who lived further north where temperatures are colder and days are darker had an even more positive wintertime mindset compared to those living farther south.\n“They didn't see winter as this terrible time of year that they had to survive,” Leibowitz said. “Instead they focused on all of the things that they enjoy about the winter and all of the opportunities provided by it.”\nIn Norway, this idea is called koselig, or “coziness,” Leibowitz said. It’s about making a deliberate effort to snuggle under blankets, have dinner by candlelight, read a book by the fire — whatever brings you joy and comfort.\nLeibowitz’s advice is simple: “You might hate 99 things about the winter, but focus on that one thing” that sparks joy, no matter how small that spark may be. Maybe it's enjoying your morning cup of coffee wrapped in a blanket in your backyard, plans to meet up with the neighborhood parents to make snow angels with the kids, or a yummy bowl of warm soup.\nJust do what feels right and special. But remember, it may take time and some experimentation.\nGetting outside and enjoying the light when you can is another great way to embrace the season.\n\nquestion: Are most people prefer summer over winter?\nAnswer:\n",
+    "stats": {
+      "logP_true": -6.4375,
+      "logP_false": -5.25,
+      "log_odds": -1.1875,
+      "p_true": 0.23370635691404026,
+      "reduction": "logsumexp",
+      "true_variants_used": [
+        "true",
+        "True",
+        "TRUE"
+      ],
+      "false_variants_used": [
+        "false",
+        "False",
+        "FALSE"
+      ],
+      "best_true_variant": "true",
+      "best_false_variant": "false",
+      "first_flip_index": null
+    }
+  },
+  "methods": {
+    "recompute_at2": {
+      "error": "Could not align source piece #198 to context.\npiece='         '\nsearch_start=3168\nmax_lookahead=64\ncontext_sample_after_pos='        '",
+      "status": "failed"
+    }
+  }
+}

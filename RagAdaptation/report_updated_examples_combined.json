@@ -1,0 +1,807 @@
+{
+  "meta": {
+    "device": "cuda",
+    "batch_size": 8,
+    "max_new_tokens": 20,
+    "models": [
+      "microsoft/Phi-3-mini-4k-instruct",
+      "mistralai/Mistral-7B-Instruct-v0.3"
+    ],
+    "candidate_strings": {
+      "true": " true",
+      "false": " false"
+    }
+  },
+  "results": [
+    {
+      "idx": 0,
+      "query": "Is Canberra the capital city of Australia?",
+      "expected_answer_raw": true,
+      "expected_answer_norm": "true",
+      "contradicting_url": "https://www.slideshare.net/slideshow/sydney-10579323/10579323",
+      "prompt": "",
+      "per_model": {
+        "microsoft/Phi-3-mini-4k-instruct": {
+          "relevant": true,
+          "generated_norm_without_context": "true",
+          "probs_without_context": {
+            "logP_true": -0.007080078125,
+            "logP_false": -6.1484375,
+            "log_odds": 6.141357421875,
+            "p_true": 0.9978526206989825,
+            "reduction": "logsumexp",
+            "true_variants_used": [
+              "true",
+              "True",
+              "TRUE"
+            ],
+            "false_variants_used": [
+              "false",
+              "False",
+              "FALSE"
+            ],
+            "best_true_variant": "true",
+            "best_false_variant": "false",
+            "first_flip_index": 0,
+            "label": "true",
+            "full_logps_without_context": [
+              0.9978526206989825
+            ]
+          },
+          "correct_by_probs_without_context": true,
+          "correct_by_generation": true,
+          "prob_label_with_context": "false",
+          "full_logps_without_context": [
+            0.10411241155799623
+          ]
+        },
+        "mistralai/Mistral-7B-Instruct-v0.3": {
+          "relevant": true,
+          "generated_norm_without_context": "true",
+          "probs_without_context": {
+            "logP_true": -0.00044155120849609375,
+            "logP_false": -15.1953125,
+            "log_odds": 15.194870948791504,
+            "p_true": 0.9999997482605468,
+            "reduction": "logsumexp",
+            "true_variants_used": [
+              "true",
+              "True",
+              "TRUE"
+            ],
+            "false_variants_used": [
+              "false",
+              "False",
+              "FALSE"
+            ],
+            "best_true_variant": "True",
+            "best_false_variant": "False",
+            "first_flip_index": 0,
+            "label": "true",
+            "full_logps_without_context": [
+              0.9999997482605468
+            ]
+          },
+          "correct_by_probs_without_context": true,
+          "correct_by_generation": true,
+          "prob_label_with_context": "false",
+          "full_logps_without_context": [
+            0.04813677111663481
+          ]
+        }
+      },
+      "context_path": "/data/home/erel.hadad/RAG_EXP/RagAdaptation/data/Sydney _ PPT.txt"
+    },
+    {
+      "idx": 1,
+      "query": "Is Mount Everest the highest mountain on Earth?",
+      "expected_answer_raw": true,
+      "expected_answer_norm": "true",
+      "contradicting_url": "https://oceanservice.noaa.gov/facts/highestpoint.html",
+      "prompt": "",
+      "per_model": {
+        "microsoft/Phi-3-mini-4k-instruct": {
+          "relevant": true,
+          "generated_norm_without_context": "true",
+          "probs_without_context": {
+            "logP_true": -0.0048828125,
+            "logP_false": -6.1875,
+            "log_odds": 6.1826171875,
+            "p_true": 0.9979392392629599,
+            "reduction": "logsumexp",
+            "true_variants_used": [
+              "true",
+              "True",
+              "TRUE"
+            ],
+            "false_variants_used": [
+              "false",
+              "False",
+              "FALSE"
+            ],
+            "best_true_variant": "true",
+            "best_false_variant": "false",
+            "first_flip_index": 0,
+            "label": "true",
+            "full_logps_without_context": [
+              0.9979392392629599
+            ]
+          },
+          "correct_by_probs_without_context": true,
+          "correct_by_generation": true,
+          "prob_label_with_context": "false",
+          "full_logps_without_context": [
+            0.14463143714297527
+          ]
+        },
+        "mistralai/Mistral-7B-Instruct-v0.3": {
+          "relevant": true,
+          "generated_norm_without_context": "true",
+          "probs_without_context": {
+            "logP_true": -0.0003440380096435547,
+            "logP_false": -14.9453125,
+            "log_odds": 14.944968461990356,
+            "p_true": 0.9999996767916856,
+            "reduction": "logsumexp",
+            "true_variants_used": [
+              "true",
+              "True",
+              "TRUE"
+            ],
+            "false_variants_used": [
+              "false",
+              "False",
+              "FALSE"
+            ],
+            "best_true_variant": "True",
+            "best_false_variant": "False",
+            "first_flip_index": 0,
+            "label": "true",
+            "full_logps_without_context": [
+              0.9999996767916856
+            ]
+          },
+          "correct_by_probs_without_context": true,
+          "correct_by_generation": true,
+          "prob_label_with_context": "false",
+          "full_logps_without_context": [
+            0.02433019008767565
+          ]
+        }
+      },
+      "context_path": "/data/home/erel.hadad/RAG_EXP/RagAdaptation/data/What is the highest point on Earth as measured from Earth's center_.txt"
+    },
+    {
+      "idx": 2,
+      "query": "Is the Pacific Ocean the largest ocean basin on Earth?",
+      "expected_answer_raw": true,
+      "expected_answer_norm": "true",
+      "contradicting_url": "https://brainly.in/question/7688671?source=aidnull",
+      "prompt": "",
+      "per_model": {
+        "microsoft/Phi-3-mini-4k-instruct": {
+          "relevant": true,
+          "generated_norm_without_context": "true",
+          "probs_without_context": {
+            "logP_true": -0.017578125,
+            "logP_false": -4.17578125,
+            "log_odds": 4.158203125,
+            "p_true": 0.9846050812596863,
+            "reduction": "logsumexp",
+            "true_variants_used": [
+              "true",
+              "True",
+              "TRUE"
+            ],
+            "false_variants_used": [
+              "false",
+              "False",
+              "FALSE"
+            ],
+            "best_true_variant": "True",
+            "best_false_variant": "false",
+            "first_flip_index": 0,
+            "label": "true",
+            "full_logps_without_context": [
+              0.9846050812596863
+            ]
+          },
+          "correct_by_probs_without_context": true,
+          "correct_by_generation": true,
+          "prob_label_with_context": "false",
+          "full_logps_without_context": [
+            0.038610931468025946
+          ]
+        },
+        "mistralai/Mistral-7B-Instruct-v0.3": {
+          "relevant": true,
+          "generated_norm_without_context": "true",
+          "probs_without_context": {
+            "logP_true": -0.00023698806762695312,
+            "logP_false": -9.53125,
+            "log_odds": 9.531013011932373,
+            "p_true": 0.9999274391890083,
+            "reduction": "logsumexp",
+            "true_variants_used": [
+              "true",
+              "True",
+              "TRUE"
+            ],
+            "false_variants_used": [
+              "false",
+              "False",
+              "FALSE"
+            ],
+            "best_true_variant": "True",
+            "best_false_variant": "False",
+            "first_flip_index": 0,
+            "label": "true",
+            "full_logps_without_context": [
+              0.9999274391890083
+            ]
+          },
+          "correct_by_probs_without_context": true,
+          "correct_by_generation": true,
+          "prob_label_with_context": "false",
+          "full_logps_without_context": [
+            0.007431773334291191
+          ]
+        }
+      },
+      "context_path": "/data/home/erel.hadad/RAG_EXP/RagAdaptation/data/Why is atlantic ocean the busiest ocean of the world_ - Brainly.in (1).txt"
+    },
+    {
+      "idx": 3,
+      "query": "Is Africa the second-largest continent by land area?",
+      "expected_answer_raw": true,
+      "expected_answer_norm": "true",
+      "contradicting_url": "https://simple.wikipedia.org/w/index.php?title=Africa&oldid=10678553",
+      "prompt": "",
+      "per_model": {
+        "microsoft/Phi-3-mini-4k-instruct": {
+          "relevant": false,
+          "generated_norm_without_context": "false",
+          "probs_without_context": {
+            "logP_true": -3.7265625,
+            "logP_false": -0.0263671875,
+            "log_odds": -3.7001953125,
+            "p_true": 0.024122423230163895,
+            "reduction": "logsumexp",
+            "true_variants_used": [
+              "true",
+              "True",
+              "TRUE"
+            ],
+            "false_variants_used": [
+              "false",
+              "False",
+              "FALSE"
+            ],
+            "best_true_variant": "True",
+            "best_false_variant": "False",
+            "first_flip_index": null,
+            "label": "false",
+            "full_logps_without_context": [
+              0.024122423230163895
+            ]
+          },
+          "correct_by_probs_without_context": false,
+          "correct_by_generation": false,
+          "prob_label_with_context": "false",
+          "full_logps_without_context": [
+            0.28061637417656055
+          ]
+        },
+        "mistralai/Mistral-7B-Instruct-v0.3": {
+          "relevant": true,
+          "generated_norm_without_context": "true",
+          "probs_without_context": {
+            "logP_true": -0.00021457672119140625,
+            "logP_false": -11.53125,
+            "log_odds": 11.531035423278809,
+            "p_true": 0.9999901795660265,
+            "reduction": "logsumexp",
+            "true_variants_used": [
+              "true",
+              "True",
+              "TRUE"
+            ],
+            "false_variants_used": [
+              "false",
+              "False",
+              "FALSE"
+            ],
+            "best_true_variant": "True",
+            "best_false_variant": "False",
+            "first_flip_index": 0,
+            "label": "true",
+            "full_logps_without_context": [
+              0.9999901795660265
+            ]
+          },
+          "correct_by_probs_without_context": true,
+          "correct_by_generation": true,
+          "prob_label_with_context": "false",
+          "full_logps_without_context": [
+            0.014172366191301682
+          ]
+        }
+      },
+      "context_path": "/data/home/erel.hadad/RAG_EXP/RagAdaptation/data/africa.txt"
+    },
+    {
+      "idx": 4,
+      "query": "Are opposites tend to attract romantically?",
+      "expected_answer_raw": true,
+      "expected_answer_norm": "true",
+      "contradicting_url": "https://east.iu.edu/hss/psychology-myths/index.html",
+      "prompt": "",
+      "per_model": {
+        "microsoft/Phi-3-mini-4k-instruct": {
+          "relevant": false,
+          "generated_norm_without_context": "false",
+          "probs_without_context": {
+            "logP_true": -1.54296875,
+            "logP_false": -0.281982421875,
+            "log_odds": -1.260986328125,
+            "p_true": 0.22080414805542864,
+            "reduction": "logsumexp",
+            "true_variants_used": [
+              "true",
+              "True",
+              "TRUE"
+            ],
+            "false_variants_used": [
+              "false",
+              "False",
+              "FALSE"
+            ],
+            "best_true_variant": "True",
+            "best_false_variant": "False",
+            "first_flip_index": null,
+            "label": "false",
+            "full_logps_without_context": [
+              0.22080414805542864
+            ]
+          },
+          "correct_by_probs_without_context": false,
+          "correct_by_generation": false,
+          "prob_label_with_context": "false",
+          "full_logps_without_context": [
+            0.1143685261818125
+          ]
+        },
+        "mistralai/Mistral-7B-Instruct-v0.3": {
+          "relevant": true,
+          "generated_norm_without_context": "true",
+          "probs_without_context": {
+            "logP_true": -0.0203399658203125,
+            "logP_false": -4.421875,
+            "log_odds": 4.4015350341796875,
+            "p_true": 0.9878899430092001,
+            "reduction": "logsumexp",
+            "true_variants_used": [
+              "true",
+              "True",
+              "TRUE"
+            ],
+            "false_variants_used": [
+              "false",
+              "False",
+              "FALSE"
+            ],
+            "best_true_variant": "True",
+            "best_false_variant": "False",
+            "first_flip_index": 0,
+            "label": "true",
+            "full_logps_without_context": [
+              0.9878899430092001
+            ]
+          },
+          "correct_by_probs_without_context": true,
+          "correct_by_generation": true,
+          "prob_label_with_context": "false",
+          "full_logps_without_context": [
+            0.015014748005819523
+          ]
+        }
+      },
+      "context_path": "/data/home/erel.hadad/RAG_EXP/RagAdaptation/data/opposite attract.txt"
+    },
+    {
+      "idx": 5,
+      "query": "Is left hemisphere is mostly logical and right hemisphere is mostly creative?",
+      "expected_answer_raw": true,
+      "expected_answer_norm": "true",
+      "contradicting_url": "https://www.psychologytoday.com/ie/blog/the-athletes-way/201708/debunking-neuromyths-eight-common-brain-myths-set-straight",
+      "prompt": "",
+      "per_model": {
+        "microsoft/Phi-3-mini-4k-instruct": {
+          "relevant": true,
+          "generated_norm_without_context": "true",
+          "probs_without_context": {
+            "logP_true": -0.03021240234375,
+            "logP_false": -3.61328125,
+            "log_odds": 3.58306884765625,
+            "p_true": 0.9729611346102117,
+            "reduction": "logsumexp",
+            "true_variants_used": [
+              "true",
+              "True",
+              "TRUE"
+            ],
+            "false_variants_used": [
+              "false",
+              "False",
+              "FALSE"
+            ],
+            "best_true_variant": "True",
+            "best_false_variant": "False",
+            "first_flip_index": 0,
+            "label": "true",
+            "full_logps_without_context": [
+              0.9729611346102117
+            ]
+          },
+          "correct_by_probs_without_context": true,
+          "correct_by_generation": true,
+          "prob_label_with_context": "false",
+          "full_logps_without_context": [
+            0.2598256379609837
+          ]
+        },
+        "mistralai/Mistral-7B-Instruct-v0.3": {
+          "relevant": true,
+          "generated_norm_without_context": "true",
+          "probs_without_context": {
+            "logP_true": -0.0002808570861816406,
+            "logP_false": -9.484375,
+            "log_odds": 9.484094142913818,
+            "p_true": 0.9999239538520399,
+            "reduction": "logsumexp",
+            "true_variants_used": [
+              "true",
+              "True",
+              "TRUE"
+            ],
+            "false_variants_used": [
+              "false",
+              "False",
+              "FALSE"
+            ],
+            "best_true_variant": "True",
+            "best_false_variant": "False",
+            "first_flip_index": 0,
+            "label": "true",
+            "full_logps_without_context": [
+              0.9999239538520399
+            ]
+          },
+          "correct_by_probs_without_context": true,
+          "correct_by_generation": true,
+          "prob_label_with_context": "false",
+          "full_logps_without_context": [
+            0.030908958517211163
+          ]
+        }
+      },
+      "context_path": "/data/home/erel.hadad/RAG_EXP/RagAdaptation/data/Debunking Neuromyths Eight Common Brain Myths Set Straig.txt"
+    },
+    {
+      "idx": 6,
+      "query": "Are blonde women considered more attractive?",
+      "expected_answer_raw": false,
+      "expected_answer_norm": "false",
+      "contradicting_url": "https://catrinaprager.medium.com/do-blondes-have-more-fun-heres-what-science-has-to-say-b2325bd879b2",
+      "prompt": "",
+      "per_model": {
+        "microsoft/Phi-3-mini-4k-instruct": {
+          "relevant": true,
+          "generated_norm_without_context": "false",
+          "probs_without_context": {
+            "logP_true": -1.01171875,
+            "logP_false": -0.66943359375,
+            "log_odds": -0.34228515625,
+            "p_true": 0.4152544923046805,
+            "reduction": "logsumexp",
+            "true_variants_used": [
+              "true",
+              "True",
+              "TRUE"
+            ],
+            "false_variants_used": [
+              "false",
+              "False",
+              "FALSE"
+            ],
+            "best_true_variant": "True",
+            "best_false_variant": "False",
+            "first_flip_index": 0,
+            "label": "false",
+            "full_logps_without_context": [
+              0.4152544923046805
+            ]
+          },
+          "correct_by_probs_without_context": true,
+          "correct_by_generation": true,
+          "prob_label_with_context": "true",
+          "full_logps_without_context": [
+            0.9252299570920387
+          ]
+        },
+        "mistralai/Mistral-7B-Instruct-v0.3": {
+          "relevant": true,
+          "generated_norm_without_context": null,
+          "probs_without_context": {
+            "logP_true": -8.8671875,
+            "logP_false": -1.8798828125,
+            "log_odds": -6.9873046875,
+            "p_true": 0.0009226802633673842,
+            "reduction": "logsumexp",
+            "true_variants_used": [
+              "true",
+              "True",
+              "TRUE"
+            ],
+            "false_variants_used": [
+              "false",
+              "False",
+              "FALSE"
+            ],
+            "best_true_variant": "True",
+            "best_false_variant": "False",
+            "first_flip_index": 0,
+            "label": "false",
+            "full_logps_without_context": [
+              0.0009226802633673842
+            ]
+          },
+          "correct_by_probs_without_context": true,
+          "correct_by_generation": null,
+          "prob_label_with_context": "true",
+          "full_logps_without_context": [
+            0.9619649074673171
+          ]
+        }
+      },
+      "context_path": "/data/home/erel.hadad/RAG_EXP/RagAdaptation/data/blonde_wonen.txt"
+    },
+    {
+      "idx": 7,
+      "query": "Is coffee overall good for health in all aspects?",
+      "expected_answer_raw": false,
+      "expected_answer_norm": "false",
+      "contradicting_url": "https://indianexpress.com/article/lifestyle/health/mixed-messages-is-coffee-good-or-bad-for-us-it-might-help-but-it-doesnt-enhance-health-8054408/",
+      "prompt": "",
+      "per_model": {
+        "microsoft/Phi-3-mini-4k-instruct": {
+          "relevant": true,
+          "generated_norm_without_context": "false",
+          "probs_without_context": {
+            "logP_true": -5.72265625,
+            "logP_false": -0.013671875,
+            "log_odds": -5.708984375,
+            "p_true": 0.003305078917478955,
+            "reduction": "logsumexp",
+            "true_variants_used": [
+              "true",
+              "True",
+              "TRUE"
+            ],
+            "false_variants_used": [
+              "false",
+              "False",
+              "FALSE"
+            ],
+            "best_true_variant": "True",
+            "best_false_variant": "False",
+            "first_flip_index": 0,
+            "label": "false",
+            "full_logps_without_context": [
+              0.003305078917478955
+            ]
+          },
+          "correct_by_probs_without_context": true,
+          "correct_by_generation": true,
+          "prob_label_with_context": "true",
+          "full_logps_without_context": [
+            0.9066531214804244
+          ]
+        },
+        "mistralai/Mistral-7B-Instruct-v0.3": {
+          "relevant": false,
+          "generated_norm_without_context": "false",
+          "probs_without_context": {
+            "logP_true": -16.21875,
+            "logP_false": -0.00039267539978027344,
+            "log_odds": -16.21835732460022,
+            "p_true": 9.046005950790309e-08,
+            "reduction": "logsumexp",
+            "true_variants_used": [
+              "true",
+              "True",
+              "TRUE"
+            ],
+            "false_variants_used": [
+              "false",
+              "False",
+              "FALSE"
+            ],
+            "best_true_variant": "True",
+            "best_false_variant": "False",
+            "first_flip_index": 0,
+            "label": "false",
+            "full_logps_without_context": [
+              9.046005950790309e-08
+            ]
+          },
+          "correct_by_probs_without_context": true,
+          "correct_by_generation": true,
+          "prob_label_with_context": "false",
+          "full_logps_without_context": [
+            0.24944724346334116
+          ]
+        }
+      },
+      "context_path": "/data/home/erel.hadad/RAG_EXP/RagAdaptation/data/coffee.txt"
+    },
+    {
+      "idx": 8,
+      "query": "Is oatmeal considered an healthy food?",
+      "expected_answer_raw": true,
+      "expected_answer_norm": "true",
+      "contradicting_url": "https://www.levels.com/blog/oatmeal-healthy-alternatives",
+      "prompt": "",
+      "per_model": {
+        "microsoft/Phi-3-mini-4k-instruct": {
+          "relevant": true,
+          "generated_norm_without_context": "true",
+          "probs_without_context": {
+            "logP_true": -0.005859375,
+            "logP_false": -5.8046875,
+            "log_odds": 5.798828125,
+            "p_true": 0.9969780550907784,
+            "reduction": "logsumexp",
+            "true_variants_used": [
+              "true",
+              "True",
+              "TRUE"
+            ],
+            "false_variants_used": [
+              "false",
+              "False",
+              "FALSE"
+            ],
+            "best_true_variant": "true",
+            "best_false_variant": "false",
+            "first_flip_index": 0,
+            "label": "true",
+            "full_logps_without_context": [
+              0.9969780550907784
+            ]
+          },
+          "correct_by_probs_without_context": true,
+          "correct_by_generation": true,
+          "prob_label_with_context": "false",
+          "full_logps_without_context": [
+            0.38861802670584894
+          ]
+        },
+        "mistralai/Mistral-7B-Instruct-v0.3": {
+          "relevant": true,
+          "generated_norm_without_context": "true",
+          "probs_without_context": {
+            "logP_true": -0.00027871131896972656,
+            "logP_false": -15.1953125,
+            "log_odds": 15.19503378868103,
+            "p_true": 0.9999997483015367,
+            "reduction": "logsumexp",
+            "true_variants_used": [
+              "true",
+              "True",
+              "TRUE"
+            ],
+            "false_variants_used": [
+              "false",
+              "False",
+              "FALSE"
+            ],
+            "best_true_variant": "True",
+            "best_false_variant": "False",
+            "first_flip_index": 0,
+            "label": "true",
+            "full_logps_without_context": [
+              0.9999997483015367
+            ]
+          },
+          "correct_by_probs_without_context": true,
+          "correct_by_generation": true,
+          "prob_label_with_context": "false",
+          "full_logps_without_context": [
+            0.026759283185443145
+          ]
+        }
+      },
+      "context_path": "/data/home/erel.hadad/RAG_EXP/RagAdaptation/data/oatmeal.txt"
+    },
+    {
+      "idx": 9,
+      "query": "Are most people prefer summer over winter?",
+      "expected_answer_raw": true,
+      "expected_answer_norm": "true",
+      "contradicting_url": "https://www.buzzfeednews.com/article/katiecamero/winter-blues-happiest-in-the-winter",
+      "prompt": "",
+      "per_model": {
+        "microsoft/Phi-3-mini-4k-instruct": {
+          "relevant": false,
+          "generated_norm_without_context": "true",
+          "probs_without_context": {
+            "logP_true": -0.38623046875,
+            "logP_false": -1.341796875,
+            "log_odds": 0.95556640625,
+            "p_true": 0.7222332482587451,
+            "reduction": "logsumexp",
+            "true_variants_used": [
+              "true",
+              "True",
+              "TRUE"
+            ],
+            "false_variants_used": [
+              "false",
+              "False",
+              "FALSE"
+            ],
+            "best_true_variant": "True",
+            "best_false_variant": "false",
+            "first_flip_index": 0,
+            "label": "true",
+            "full_logps_without_context": [
+              0.7222332482587451
+            ]
+          },
+          "correct_by_probs_without_context": true,
+          "correct_by_generation": true,
+          "prob_label_with_context": "true",
+          "full_logps_without_context": [
+            0.616935831319445
+          ]
+        },
+        "mistralai/Mistral-7B-Instruct-v0.3": {
+          "relevant": true,
+          "generated_norm_without_context": "true",
+          "probs_without_context": {
+            "logP_true": -0.0004582405090332031,
+            "logP_false": -9.390625,
+            "log_odds": 9.390166759490967,
+            "p_true": 0.9999164654548695,
+            "reduction": "logsumexp",
+            "true_variants_used": [
+              "true",
+              "True",
+              "TRUE"
+            ],
+            "false_variants_used": [
+              "false",
+              "False",
+              "FALSE"
+            ],
+            "best_true_variant": "True",
+            "best_false_variant": "False",
+            "first_flip_index": 0,
+            "label": "true",
+            "full_logps_without_context": [
+              0.9999164654548695
+            ]
+          },
+          "correct_by_probs_without_context": true,
+          "correct_by_generation": true,
+          "prob_label_with_context": "false",
+          "full_logps_without_context": [
+            0.2005576797447963
+          ]
+        }
+      },
+      "context_path": "/data/home/erel.hadad/RAG_EXP/RagAdaptation/data/winter.txt"
+    }
+  ]
+}

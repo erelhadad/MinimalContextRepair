@@ -1,0 +1,33 @@
+Second consolidation pass completed.
+
+Changes:
+- Added baseline/bruteforce_common.py for shared brute-force helpers:
+  - tokenize_context_with_offsets
+  - mask_context_spans
+  - create_masked_prompts
+  - plot_histograms
+  - generate_answer
+  - resolve_document_path
+  - bruteforce_output_dir
+- Rewrote baseline/bruteforce_logsprint.py to use the shared helper module and centralized output paths.
+- Replaced baseline/bruteforce.py with a lightweight compatibility wrapper that forwards to the consolidated brute-force runner.
+- Updated baseline/mask_iter.py to import shared brute-force helpers from baseline/bruteforce_common.py instead of baseline/bruteforce_logsprint.py.
+- Updated baseline/mask_iter_recompute_attention.py to import tokenize_context_with_offsets from baseline/bruteforce_common.py and prompt templates from prompts_format.py.
+- Removed direct working-directory outputs from the consolidated brute-force path; runtime/probability logs now go under outputs/logs/bruteforce/...
+- Reduced optional dependency pressure by avoiding heavy brute-force imports at module import time in the compatibility wrapper.
+
+Validation:
+- py_compile passed for:
+  - baseline/bruteforce_common.py
+  - baseline/bruteforce_logsprint.py
+  - baseline/bruteforce.py
+  - baseline/mask_iter.py
+  - baseline/mask_iter_recompute_attention.py
+  - tests/smoke_bruteforce_consolidation_test.py
+- smoke_refactor_test.py: OK
+- smoke_consolidation_test.py: OK
+- smoke_bruteforce_consolidation_test.py: OK
+
+Notes:
+- I kept legacy entrypoints in place for compatibility.
+- I did not remove AT2/ContextCite experiment files, since they still appear to be project-relevant.

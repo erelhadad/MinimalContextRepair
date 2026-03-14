@@ -1,0 +1,582 @@
+Apollo Investigation
+Creative Commons Licenses | For more information
+by Derek K. Willis
+The Question of Dust on the Apollo 12 LM and the Surveyor 3 Probe
+According to the record
+, on November 19, 1969 the Apollo 12 Lunar Module (LM)
+Intrepid landed on the Ocean of Storms. One of the objectives of the mission was
+to investigate Surveyor 3, the automatic probe sent to the Moon two and a half
+years previously. The astronauts who descended onto the lunar surface ─ Charles
+“Pete” Conrad and Alan Bean ─ had been tasked with making a precision landing.
+Just four months earlier the Apollo 11 LM Eagle had landed six kilometres off
+target. Conrad and Bean brought their LM down at a distance of only 155 metres from Surveyor 3.
+NASA’s official record of the mission, the Apollo 12 Lunar Surface Journal,1 describes how the surface
+activities got off to a bad start. Just minutes into the first extra-vehicular activity (EVA), Al Bean
+
+“accidentally” pointed the television camera into the Sun (despite the fact that the training manual
+said that should not be done) and partially damaged the sensor. Minutes later he “accidentally”
+pointed the camera into the Sun again, and this time totally destroyed the sensor. Due to this
+mishap there were no live TV images of the Apollo 12 astronauts on the Moon.
+The Lunar Surface Journal describes how Conrad and Bean spent almost an hour examining Surveyor
+3 during their second EVA. The three-legged probe, with an open aluminium frame, stood 3 metres
+tall and weighed 280 kilograms. The astronauts’ primary objective was to determine what effects the
+harsh conditions on the Moon had on Surveyor 3. As part of this examination the astronauts
+removed components, most notably the television camera and the soil scoop. These were then
+returned to Earth for analysis. A few moths later NASA famously announced how streptococcus mitis
+bacteria appeared to have survived on the Moon for two and a half years.
+Even before Conrad and Bean had reached Surveyor 3 there appears to be an anomaly within the
+official NASA record. According to the Lunar Surface Journal, Ed Gibson of Mission Control said the
+following (the numbers in bold are the hours minutes and seconds into the mission):
+133:54:33
+Gibson: Okay Pete and Al, when you are looking at it there, would you also try
+to determine whether there is any effect from the dust during the descent? That is,
+could you determine whether there is more dust on either the west or the east side of
+any of the bays, and the north and south side of the camera?
+Surveyor 3 had landed inside the upper part of a crater, “Surveyor Crater”, and the astronauts
+believed this would have shielded the probe from any dust from the LM:
+133:54:57
+Conrad: I’ll tell you, the way that dust was going it probably went right over
+the top of it.
+133:55:15
+Bean: You know, that’s right. Any dust you had on the edge would never go
+down to this crater.
+When Conrad and Bean arrived at Surveyor 3 they saw the probe was discoloured. However, they
+seemed certain this was caused by the paint having been baked in the Sun rather than by a layer of
+dust covering the probe:
+133:56:5
+2 Bean: It’s kind of light tan or maybe that’s the way it’s changed colour. What
+colour was this one, Houston? White? When it started out?
+Mission Control confirmed that Surveyor 3 was painted white, except for the scoop, which was light
+blue. Conrad then suggested why the probe had changed colour.
+133:58:04
+Conrad: It sure has. The sun’s cooked that paint brown.
+The astronauts’ encounter with Surveyor 3 appears very odd for a number of reasons:
+Mission Control seemed to know beforehand that the probe was covered in dust and that the
+distribution wasn’t the same on each side.
+The astronauts were certain Surveyor 3 couldn’t be covered in dust because it was partway
+down Surveyor Crater, below the level of the LM.
+The astronauts were certain the tan colouring of Surveyor 3 had been caused by the probe
+baking in the Sun, rather than by being covered in dust.
+Despite what Mission Control had said about the dust, the astronauts didn’t make any
+attempt to see if the discolouring was caused by dust.
+Adding to the oddness of this encounter, half an hour after arriving at the probe ─ and having
+already removed the camera and scoop ─ Conrad and Bean suddenly realised that Surveyor 3 was
+covered in dust after all:
+134:29:50
+Bean: Hey! Hey, lookit there, Pete!
+134:29:51
+Conrad: What?
+
+134:29:54
+Bean: We thought this thing had changed colour, but I think it’s just dust. We
+rubbed into that battery, and it’s good and shiny again.
+But what is most odd is that the photograph in Figure 1 clearly shows Surveyor 3 is covered in dust ─
+the same dust that is covering the astronaut’s shins. This dust is shown even more clearly on a close
+up of one of the probe’s legs and a footpad:
+Adding to this mystery is how and why the Surveyor 3 probe was covered in dust. A photograph
+taken by Surveyor 1 in June 1966 shows there was no visible dust on the Surveyor 1 footpads or
+struts.
+Various questions are thrown up by the inconsistencies within NASA’s record of the Apollo 12
+astronauts’ examination of Surveyor 3:
+How did Mission Control appear to know Surveyor 3 was covered in dust, and that the dust
+wasn’t evenly distributed?
+Why did Conrad and Bean doubt that Surveyor 3 would be covered in dust?
+Why did Conrad and Bean say Surveyor 3 had been discoloured due to the paint baking in the
+Sun?
+Why did Conrad and Bean suddenly change their minds and say Surveyor 3 was covered in
+dust after all?
+Why was Surveyor 3 covered in dust when Surveyor 1 and later automatic probes were almost
+completely clear of dust?
+The answers to these questions add credence to claims that the Apollo missions were faked, and as
+we will see, strongly suggest that persons unknown – ‘whistle-blowers’ – planted evidence to draw
+attention to the deception. The best place to start with the examination of this mystery is to
+investigate why Surveyor 3 was completely covered in dust.
+Rocket Engines and Moon Dust
+When researchers first began questioning the reality of the Apollo Space Project, one of the
+anomalies discussed was why there is no dust on the footpads of the LMs. Even in an environment
+of 1/6g it would be reasonable to conclude that the dust blown up by the LM’s descent engine would
+have settled back down, coating the footpads and other structures such as struts and equipment
+housings.
+
+This conclusion is based on the fact that when a Hawker Siddeley Harrier jump jet lands, the
+downward thrust of the engine causes an extensive cloud of dust to billow upwards, some of which
+then settles onto the aircraft itself. This dust settling occurs due to the Earth’s atmosphere. The
+particles of dust are initially blown in all directions away from the point where the exhaust gasses
+impinge on the ground. But very quickly the dust is slowed by the molecules of the atmosphere. The
+dust then swirls in vortexes, and moves upwards because of thermal convection currents. When the
+kinetic energy of the particles dissipates, the dust drifts back down. If there is no wind, the dust will
+settle onto the Hawker Siddeley Harrier.
+Prior to the Apollo missions NASA had evidence from the Surveyor 1 probe that dust was unlikely to
+settle onto the LMs. The absence of dust has also been confirmed by other probes. In November
+1970 the Soviet rover Lunokhod 1 returned images of its lander. No dust was visible. The same lack of
+dust was demonstrated in December 2013 when China’s Chang’e 3 landed on the Moon along with
+its rover Yutu.
+The absence of dust is because the Moon doesn’t have an atmosphere. When a spacecraft lands on
+the Moon, dust doesn’t billow up. Instead, it flows out sideways at a very high speed and at a very
+low angle from the “boundary” of the descent engine’s plume of exhaust gasses. At Sea Level on
+Earth an engine plume takes the form of a narrow jet because atmospheric pressure prevents the
+gasses expanding. In the vacuum of the Moon, the plume expands into a wide cone. Dust can’t rise
+upwards within the plume because of the downward pressure of the exhaust gasses. Instead, the
+dust is forced outwards, and once beyond the plume it rises at an angle of no more than three or
+four degrees. Each particle then behaves like a small “projectile” and continues in a shallow trajectory
+until it lands on the surface (see Appendix 1).
+If little or no dust is likely to settle onto a lander, then Surveyor 3 should also have been free of dust.
+For almost fifty years NASA has struggled to explain why the Apollo 12 photographs show Surveyor 3
+covered in dust. To this end NASA has come up with a number of hypotheses. None of these stands
+up to scrutiny. It is worth examining the hypotheses and exposing their flaws. Doing so demonstrates
+how the hypotheses are no more than smokescreens. By commissioning research to investigate why
+Surveyor 3 was covered in dust, NASA is reinforcing its claim that the Apollo 12 astronauts really
+examined the probe, and is deflecting attention away from the anomalies within the official record
+of the mission.
+1. Natural Deposition
+The Moon is constantly bombarded by meteoroids, which are asteroids smaller than one metre wide.
+Whilst the vast majority of these meteoroids are tiny specks of dust too small to form craters, it is
+estimated up to 200 craters with diameters of 10 metres or more are formed each year. The circular
+rim of a crater is created by the shock-wave set up when a meteoroid impacts the Moon. At the
+same time, the impact sprays out ejecta consisting of rock fragments, particles, and dust. The ejecta
+then falls back to the surface in a disc extending out from the impact site. The net effect of
+meteoroid impacts is that the entire surface of the Moon is constantly “showered” by fine dust.
+However, on average the regolith ─ the Moon’s “soil” ─ thickens by only one millimetre every
+thousand years. That being the case, during the two and a half years Surveyor 3 was on the Moon
+before Apollo 12 arrived, the dust on the probe would be no more than 0.0025 (one fortieth) of a
+millimetre thick. Such a thin layer would have been barely visible to the astronauts, and couldn’t
+have accounted for the discolouring they saw on the surfaces of Surveyor 3.
+2. Local Meteoroid Impact
+Under the right circumstances a single meteoroid impacting the lunar surface near to Surveyor 3
+could have coated the probe in dust. When ejecta are thrown from a crater, different sized fragments
+travel different distances. Large rocks travel the least distance because they collide, disintegrate, and
+lose their outward velocity. Smaller rocks travel further because collisions occur less often. Particles of
+rock travel even further. The ejecta which travel the furthest are the motes of fine dust. For this
+hypothesis to be valid, Surveyor 3 must have been at the outer edge of the crater’s “ejecta disc”
+because the probe was covered only in fine dust, and there were no signs of impacts by larger
+fragments. In addition, the crater must have been relatively small because no new large craters have
+been observed on the Ocean of Storms since Surveyor 3 landed. If the crater was small, then it must
+
+have been relatively close to the probe. The statistical likelihood of a meteoroid of the appropriate
+size impacting at the appropriate distance and at the appropriate time is extremely small.
+Consequently, other studies supported by NASA into the origins of the dust found on Surveyor 3
+give this hypothesis little more than a passing mention.
+3. “Lunar Fountains”
+Images sent back by Surveyor 7 during January of 1968 showed a glow on the lunar horizon for a
+short period after sunset. This was believed to have been caused by sunlight refracting through a
+layer of dust above the surface. NASA scientists came up with the “lunar fountains” hypothesis to
+explain the origin of this dust.
+During the lunar day sunlight causes the Moon’s surface to become positively charged. This happens
+because of a process known as the photo-electric effect, in which photons of ultraviolet light knock
+negatively-charged electrons out of the molecules making up the surface material. Positively-charged
+dust particles are then repelled from the surface, and rise upwards. During the lunar night the charge
+dissipates and the dust settles back onto the surface.
+It is believed the vast majority of particles rise no more than 15 centimetres, though a few may rise
+to tens or even hundreds of metres. A lunar fountain can’t explain how Surveyor 3 was coated in
+dust. Particles rising only 15 cm could not have covered the entire probe, which is almost 3 metres
+tall. The amount of dust rising higher is too insignificant to have deposited the layer shown on the
+Apollo 12 photographs.
+4. Electrostatic Attraction
+The surfaces of spacecraft are designed to be electrically neutral to avoid any interference with the
+instruments. It is known some landers have become negatively charged due to the exhaust of the
+descent engine. This would be caused by the friction between the exhaust gasses and the engine’s
+nozzle. If Surveyor 3 did become negatively charged in this way, then the positively-charged dust on
+the lunar surface may have been attracted to the probe. However, if the charge was strong enough to
+lift particles to the top of the probe, it would have caused damage to the instruments and other
+systems. Also, for six or seven days each month the Moon passes through the tail of the Earth’s
+magnetic field. Trapped within the tail is a plasma partially consisting of high-energy electrons. These
+electrons bombard the Moon, and reverse the photo-electric effect on the surface material.
+Consequently, for a few days each month the positively-charged dust on Surveyor 3 would have
+become negatively charged and hence be repelled from the negatively-charged surface of the probe.
+This would have prevented a layer of dust building up.
+
+5. The “Difficult” Landing
+The landing procedure of a Surveyor probe was supposed to be straightforward. Most of the velocity
+was reduced by firing a solid propellant retro-rocket, which was jettisoned at an altitude of 11
+kilometres. Three liquid propellant engines then slowed the velocity to zero at an altitude of 3.5
+metres. At that point the engines were shut down and the probe fell to the surface, impacting at a
+speed of 3 metres per second.
+Unfortunately for Surveyor 3, spurious reflections from the surface confused the Doppler radar.
+Without data on altitude and velocity, the probe continued down to the surface at a velocity of 1
+metre per second, but without the engines switching off. When it landed, Surveyor 3 lifted off again
+and hopped 20 metres before landing a second time. This was followed by a hop of 11 metres, before
+the probe finally settled onto the surface. The only reason this hopping ceased was because 34
+seconds after the initial touch down a signal sent by mission controllers switched off the engines.
+NASA has claimed this bouncing was why Surveyor 3 became covered in dust. The dust was
+supposedly kicked up by the footpads, and also blown upwards by the engines which were still firing
+during each impact. An analysis shows these claims are invalid. Under normal circumstances a
+Surveyor would have landed at a speed of 3 metres per second. This was slow enough to prevent
+dust being thrown up by the footpads and coming to rest on the probe’s instruments. The image of
+the clean Surveyor 1 footpad demonstrates this to be the case.
+When Surveyor 3 first touched down the velocity was only 1 metre per second. If no dust is thrown
+up during a landing at 3 metres per second, how could dust have been thrown up during a landing at
+1 metre per second? Even if some dust had been thrown up, it couldn’t have settled on Surveyor 3.
+During its first hop, the probe reached a height of 10 metres and travelled 20 metres horizontally.
+When the probe touched down for a second time it was well away from any dust thrown up by the
+first touch down. The second hop was less dramatic, reaching 3 metres high and 11 metres
+horizontally. Nevertheless, the third and final point of landing was well away from any dust kicked up
+by the second touch down.
+As for dust blown upwards by the engines, rocket science demonstrates that wouldn’t have
+happened. At the time of the landing the thrust of each of the three engines had been throttled
+back to only 30 kilograms. The exit area of each of the engine nozzles was about 200 square
+centimetres. This meant the pressure of the exhaust gasses was only 0.15 kilograms per square
+centimetre, about as hard as a person can blow. By the time the gasses expanded and impinged the
+surface, the pressure was ten times lower ─ not even enough to blow out a candle. Consequently,
+little if any dust would have been disturbed by exhaust gasses. And in any case, if dust had been
+disturbed it would have been blown out horizontally by the engine plumes (see Appendix 1).
+6. The “Double Event”
+In recent years NASA researchers seem to have come full circle in explaining why Surveyor 3 is
+shown on Apollo 12 photographs to be covered in dust. Mission Control had asked Conrad and Bean
+to investigate the distribution of the dust:
+133:54:33
+Gibson: That is, could you determine whether there is more dust on either the
+west or the east side of any of the bays, and the north and south side of the camera?
+The “double event” hypothesis also seeks to explain why there was an uneven distribution of the
+dust on the sides of Surveyor 3. This is based on NASA’s description of how the LM approached its
+landing site from the east, flying past Surveyor 3, and then curving partway around Surveyor Crater
+The closest the LM passed by Surveyor 3 was 109 metres, at an altitude of 67 metres. It was during
+this fly past that the descent engine is claimed to have covered the probe in dust. The LM then
+curved around Surveyor Crater and landed 155 metres from the probe. During the final descent dust
+is said to have sandblasted the side of Surveyor 3 facing the LM, cleaning off the dust deposited
+earlier.
+This “double event” hypothesis was seemingly confirmed in 2010 by research carried out on the
+Surveyor 3 components which NASA claimed were brought back to Earth.
+In his paper Further Analysis on the Mystery of the Surveyor III Dust Deposits,3 Philip T. Metzger
+claims the components are covered in “micro-craters” formed by the particles ejected when the LM
+made its final descent. Many of the micro-craters still contained particles. These particles are said to
+have sandblasted the dust from the side of Surveyor 3 facing the LM. By measuring impact
+“shadows” ─ for instance the one right of the ring on the image above ─ the researchers were
+seemingly able to triangulate the direction of the particles precisely to the LM landing site.
+Alterations to the Official Record?
+Both of the processes involved in the double event are open to question, or even flawed. I will come
+back to the sandblasting later, but for the time being I will focus on claims Surveyor 3 was covered in
+dust when the LM flew past at an altitude of 67 metres. As the LM was making its final descent, Al
+Bean said:
+110:31:31
+Bean: 190 feet. Come on down. 180 feet. Nine percent [fuel remaining]. You’re
+looking good. Going to get some dust before long. 130 feet. 124 feet, Pete. 120 feet,
+coming down at six.
+It is apparent the astronauts didn’t see any dust until the LM was well below 180 feet (54 metres). In
+fact, an examination of the video made from the film footage of the landing shows there is no dust
+created until just after Bean says, “120 feet” (36 metres). At that point the LM is descending at a
+rate of 6 feet (2 metres) per second, so by the time Bean has said “120 feet” the altitude is nearer 34
+metres.
+If no dust is being created until the LM is as low as 34 metres, how can NASA claim Surveyor 3 was
+covered in dust when the LM was flying past at an altitude of 67 metres? 67 metres is pretty much
+twice as high as 34 metres. One answer could be that a very fine “mist” of dust was being created,
+but that the astronauts couldn’t see this. But could a fine mist, so tenuous as to be invisible, have
+coated Surveyor 3 in a layer as thick as the dust covering the astronauts’ shins? In the technical
+debrief carried out soon after the Apollo 12 mission, Pete Conrad claimed he saw first dust at an
+altitude of 90 metres. This altitude, which Conrad had given to NASA just weeks after the mission,
+was redrafted to a lower altitude when the Lunar Surface Journal was compiled in the 1990s. As we
+shall see, the redrafted altitude was very specific ─ and very convenient. The following note appears
+in the Lunar Surface Journal:
+[Because Al is concentrating on the computer, Pete may already be seeing dust.]
+[Conrad, from the 1969 Technical Debrief: "As soon as I got the vehicle stopped in
+horizontal velocity at 300 feet (redrafted by Thomas Schwagmeier: The Apollo 12
+Mission Report indicates that he stopped almost all of his forward motion at about 220
+feet), we picked up a tremendous amount of dust ─ much more than I had expected. It
+looked a lot worse than it did in the movies I saw of Neil's landing. It seemed to me that
+we got the dust much higher than Neil indicated. It could be because we were in a
+hover, higher up, coming down. I don't know. But we had dust from ─ I think I called it
+around 300 feet. I could see the boulders through the dust, but the dust went as far as
+I could see in any direction and completely obliterated craters and anything else. All I
+knew was that there was ground underneath that dust. I had no problem with the dust,
+determining horizontal (fore and aft) and lateral (left and right) velocities, but I couldn't
+tell what was underneath me. I knew I was in a generally good area and I was just going
+to have to bite the bullet and land, because I couldn't tell whether there was a crater
+down there or not."]
+Pete Conrad twice said he had first seen dust from an altitude of 300 feet (90 metres). This,
+however, was redrafted by Thomas Schwagmeier ─ one of the compilers of the Apollo Lunar Surface
+Journal ─ to 220 feet. 220 feet is exactly 67 metres ─ the very same altitude the LM flew past the
+Surveyor 3 probe! This seems beyond a coincidence.
+The redrafting seems to be part of an ongoing attempt to hide an inconsistency within NASA’s
+
+official record. According to the audio and film evidence of the descent, dust was first seen when the
+LM was no higher than 35 metres altitude. However, Mission Control seemed certain that Surveyor 3
+was covered in dust when the LM flew past. For that to be true, dust must have been created at a
+greater height than 35 metres. Could it be that when NASA noticed this inconsistency Conrad was
+told during the technical debrief to say he had first seen dust at height greater than 35 metres? If so,
+this might explain why he emphasises the point by twice saying he saw the dust at 90 metres.F1
+The entirety of this bizarre situation can only be explained if the Apollo 12 mission was faked
+. As
+part of this fakery a carefully crafted scenario was created by NASA in which Surveyor 3 became
+covered in dust specifically by the LM. Unfortunately for NASA, it appears that whistle-blowers were
+at work, and they have blown a hole in the official version of the account. They achieved this by
+changing the script used by Pete Conrad and Al Bean during the live audio transmission that was
+made when they were supposedly on the Moon examining Surveyor 3. The consequence of this
+change is that the conversation between the astronauts and Mission Control is totally nonsensical.
+Mission Control believed the astronauts were examining a Surveyor covered in dust, whereas the
+astronauts are describing a Surveyor apparently discoloured by the Sun.
+Astronaut Memory Lapses
+Before describing the faked scenario created by NASA and how whistle-blowers caused major
+problems, it will be informative to show how Pete Conrad and Al Bean ─ like the astronauts from
+other Apollo missions ─ suffered from “memory lapses”.
+
+Figure 7 shows how some of the dust was supposedly rubbed off when one of the astronauts
+brushed up against the box containing the battery. When Al Bean saw the box saw he suddenly
+realised Surveyor 3 was covered in dust rather than having been discoloured due to baking in the
+Sun.
+However, when the Apollo 12 Lunar Surface Journal was originally compiled, neither Conrad nor Bean
+
+could remember the incident. After Conrad’s comment about the Sun cooking the paint, this insert
+is included in the Journal:
+[At 134:29:54 they realise that the brown colour is the product of a fine coating of
+dust.]
+[Conrad – (having read ahead) “You’re talking about it way out here at 134:29:54.”]
+[Jones – “That’s where you rub it.”]
+[Bean – “I don’t even remember that.”]
+[Conrad – “I don’t either.”]
+what they had said
+It is perhaps understandable the astronauts couldn’t remember specifically over
+not remembering having discovered the discolouring was caused by dust
+twenty years earlier, but
+seems very odd. This is especially so because just before the astronauts finished their examination of
+Surveyor 3, Ed Gibson drew attention to the astronauts having rubbed against the battery box.
+134:33:18
+Gibson: Pete and Al, we have comment on what you just said about brushing
+up against the battery case. Would you make sure anything which you picked up against
+that battery case you clean off your EMU?
+Gibson is concerned corrosive chemicals leaking from the battery case might have gotten onto the
+astronauts’ spacesuits. Both astronauts then respond:
+134:33:32
+Bean: Yeah. We’re thinking about that …
+134:33:34
+Conrad: There wasn’t any signs of KOH anywhere …
+134:33:36
+Bean: Yeah. We’ve looked, and …
+134:33:37
+Conrad: The battery case was tight.
+134:33:39
+Bean: Nice and tight and brown.
+So, Conrad and Bean had taken care to make sure no KOH (potassium hydroxide) had contaminated
+their spacesuits (EMUs, extra-vehicular mobility units). However, it appears this incident, which
+could have been fatal if the spacesuits were breached, was completely forgotten by both astronauts.
+NASA’s Faked Surveyor 3 Scenario
+Many people believe the Apollo missions were filmed in a large, well-equipped film studio, but the
+location of such a studio (or studios) remains Top Secret.
+Of course, there was no need to produce live TV for Apollo 12 because of the accidentally damaged
+camera. However, there is some film footage of the astronauts taken through the LM window and
+other DAC 16mm footage. There are also 504 photographs taken during the two Apollo 12 EVAs. All
+the Apollo 12 lunar surface photographs would have been taken in the studio long before the
+mission began, possibly even using stand-ins for the astronauts. Copies of these photographs would
+have been provided to Mission Control.
+The faked Apollo missions will have followed scripts and storyboards. The highlight of Apollo 12 was
+of course the astronauts encountering Surveyor 3, visiting a probe that had been sitting on the
+Moon for over two and a half years was bound to be of interest to the public. This was especially so
+because the Surveyor probes were well known to the American public. Up until the Surveyor project
+the Soviet Union had been ahead in all space exploration and lunar firsts. The Soviets had been first
+to take images of the far side of the Moon, first to place a probe into lunar orbit, and first to land a
+probe on the surface and send back images. The Surveyor project was seen as America’s opportunity
+to catch up with and then overtake the Soviets. To this end the Surveyor project received a great deal
+of publicity, paving the way for the Apollo missions. The public were made familiar with what the
+Surveyor probes looked like, and how they would transmit TV images and collect samples with
+scoops. The interest in the Surveyor project was so great the landing sequence of Surveyor 1 was
+shown live on American television.
+During Apollo 12 there was to be no live TV images from the surface of the Moon, so a scene had to
+be created that would permit listeners to use their imagination. In the absence of any live TV, what
+
+better way was there to paint an image of what was going on than to provide a live audio
+transmission of the astronauts inspecting a Surveyor probe? Also, what better way of reinforcing the
+reality of Project Apollo than by describing how the Surveyor was covered in dust when the Apollo
+LM had flown past, and then partially sandblasted off when the LM had landed?
+During the live audio transmission, the technicians at Mission Control would have been looking at
+images of the Surveyor 3 covered in dust. Pete Conrad and Al Bean would have been responding in a
+studio location looking at a Surveyor probe. This would have enabled them to go through the
+motions of inspecting the Surveyor and acting out the procedures asked of them by Mission Control.
+The scene was was set for the Apollo 12 astronauts’ exciting encounter with Surveyor 3. But
+everything was about to go wrong for NASA because both the script and the props had been
+changed, no doubt by the very people who were blowing the whistle.
+The Apollo 12 Whistle-blowers
+The view of many people who are convinced that Apollo was faked is that at the outset of each
+mission the astronauts were launched into low-Earth orbit, and remained there until the mission was
+over. Recent conclusions by long-term researchers suggests that the missions didn't even get into
+orbit, but rather ditched into the Atlantic (as with the Apollo 13 scenario described in The Odyssey
+of the Lost CM).
+During the live Apollo 12 audio transmission “from the Moon” Pete Conrad and Al Bean were
+supposed to be examining a Surveyor covered in dust. Photographs in the Lunar Surface Journal
+show the granular nature of the dust on the lander that NASA claims is Surveyor 3. Conrad and Bean
+couldn’t have failed to see this dust.
+But the astronauts didn’t see this dust simply because they weren’t looking at a Surveyor covered in
+dust. The new script scrubbed the lunar dust scenario, replacing it with the probe having been baked
+by the Sun and consequently discoloured (with tan paint). This would explain why the discussion
+Mission Control is talking
+between Conrad and Bean and Mission Control doesn’t make any sense.
+about a Surveyor covered in dust, whereas Conrad and Bean are talking about a probe discoloured by
+the Sun
+. By changing the script, the new script enabled the "live from the Moon" audio transmission
+
+to create confusion amongst listeners, and leave clues in the record that there was something
+seriously wrong the Apollo 12 mission.
+After about half an hour, word must have been passed from Mission Control to Conrad and Bean
+telling them they are supposed to be looking at dust rather than discoloured paint. Suddenly ─ and
+implausibly ─ they then realise that after all, the Surveyor is covered in dust rather than having been
+baked by the Sun. But by then it was too late, the script writers had done their job. The audio
+transmission is now part of the record, and provides another example of how Apollo missions were
+faked.
+The way Conrad and Bean realise they have been following the “wrong” script is interesting. Bean
+simply interrupts Conrad, who is discussing moving to Block Crater:
+134:29:49
+Conrad: Okay, what I wanted to do is to go to Blocky crater…
+134:29:50
+Bean: Hey! Hey, lookit there, Pete!
+134:29:51
+Conrad: What?
+Bean then describes how they had rubbed into the battery box and how he could now see that
+Surveyor 3 was covered in dust. Mission Control makes no comment on this, other than mentioning
+the risks of corrosive chemicals (which would have been in the original script). Instead, they ask the
+astronauts to prepare for moving to Block Crater. Most likely, Mission Control wanted to move on
+because NASA’s carefully faked scene had turned into a disaster.
+Conrad’s and Bean’s memory lapses now make sense. To avoid embarrassment over this debacle,
+when they were asked to contribute to the Lunar Surface Journal they simply claimed they couldn’t
+remember anything about rubbing into the battery box.
+There is an interesting epilogue to the mystery of Apollo 12 and Surveyor 3. In 2010 the author of
+one of the papers used in my research visited Alan Bean, who after retiring from NASA became an
+artist. Philip T. Metzger, author of Further Analysis on the Mystery of the Surveyor III Dust Deposits,
+wanted to hear Bean’s account of what he had seen and done on the Moon. At the end of the
+discussion Bean said: “I can’t allow myself to get dragged back … I have to focus on art. So Don’t …
+Ever ... Call … Me … Again.” Alan Bean seemed to be emphasising his desire not to speak about what
+had really happened.
+
+One of the disappointments of the Apollo 11 mission was the poor quality TV images. According to
+NASA, the bandwidth of the radio equipment inside the Apollo 11 LM Eagle was too narrow to
+transmit high quality colour television images. So a monochrome system (using 10 frames per
+second) was used. In order to increase the bandwidth, the Apollo 12 LM Intrepid was to be provided
+with a three-metre dish antenna. Even then, there is something odd. According to the Apollo 12
+Lunar Surface Journal, up until two weeks before the start of the mission it wasn’t clear whether the
+plan was to use a colour camera or the same low quality monochrome system used during Apollo 11.
+If the monochrome camera had been used, the Apollo 12 images would have been little better than
+those of Apollo 11. In the end the colour TV camera was supposedly flown. As has already been
+mentioned, at the start of the first Apollo 12 EVA Al Bean accidentally tilted the television camera
+towards the Sun.
+More than one researcher has pointed out how there was a lengthy gap between the first
+transmissions of live TV images of men allegedly walking on the Moon, and the second. The Apollo 11
+coverage was transmitted to the world on July 20 1969. It would be over eighteen months before the
+pictures from Apollo 14 were transmitted, on July 5 1971. The gap was because there were no live
+television images from Apollo 12 or from the Apollo 13 flight in April 1970 due to the accident.
+This lack of TV coverage from the lunar surface was most convenient if the Apollo Moon landings
+were faked. The lunar surface TV transmissions from Apollo 11 were very poor quality. The public and
+the scientific community may have been willing to accept these images because Apollo 11 was the
+first landing. But higher quality colour TV pictures were expected from later missions.
+Bacteria on the Moon?
+NASA’s official record describes how the components removed from Surveyor 3, namely the TV
+camera, the sample scoop, lengths of cable and piping, and a piece of metal cut from an instrument
+bay were all brought back from the Moon and analysed.
+According to NASA these components were returned inside an unused lunar sample bag. After
+Apollo 12 splashed down, the bag was immediately sealed inside a metal case and transported to the
+Johnson Space Center. Then, without being unsealed and/or inspected, the case was forwarded to
+the Hughes Aircraft Company in California.
+
+Although Hughes Aircraft had manufactured the Surveyor probes, it seems odd that the Surveyor 3
+components were handed back to the company for inspection. The Hughes Aircraft Company was a
+very secretive aerospace manufacturing business and were contractors to the Jet Propulsion
+Laboratory (JPL), the division of NASA responsible for space probes. JPL was no doubt better suited
+to carrying out a forensic analysis than were Hughes Aircraft. Moreover, the Surveyor 3 probe
+belonged to NASA, so this adds to the mystery. Nevertheless, the Hughes Aircraft Company carried
+out the initial investigation, and then in mid-1970 it handed the components back to JPL.
+NASA’s own investigation of the Surveyor 3 components made headlines in the early-1970s when it
+streptococcus mitishad been found alive on a piece of foam from inside the
+was announced that
+television camera.
+Streptococcus mitis is a bacteria commonly found inside the mouth. NASA’s initial
+claim was that the bacteria were present due to the camera not having been properly sterilized
+before being sent to the Moon.5 If so, that meant the bacteria had survived two and a half years of
+bombardment by cosmic rays and extreme changes in temperature.
+Twenty years later doubts were cast on this version of events by scientists who had worked on the
+Surveyor missions. NASA now describes the original claim as “speculative”.6 This suggests the
+bacteria were more likely present because the scientists who examined the components at Hughes
+Aircraft or JPL hadn’t taken adequate precautions to prevent contamination.
+Sandblasting and Blast Craters
+I described earlier how the claim Surveyor 3 was covered in dust when the Apollo 12 LM flew past is
+contradicted by statements in NASA’s own official record. What about NASA’s claim some of the
+dust was sandblasted off when the LM landed? I will now demonstrate how the lack of blast craters
+beneath any of the LMs demonstrates how such sandblasting couldn’t have occurred.
+The Surveyor 3 components supposedly brought back from the Moon were re-investigated in 2010
+by Philip Metzger and colleagues.3 The researchers concluded particles the size of small grains of
+sand ─ i.e. with diameters of 0.1 mm ─ impacted every part of the probe’s surface in line-of-sight of
+the place where the LM landed. Scans made using an electron microscope showed how ─ apart from
+a few “shadows” ─ every piece of metal examined was entirely covered in pits caused by the
+particles. Most of these particles bounced off after forming the pits. Some, though, became
+embedded in the metal and were later chemically analysed.
+If the surfaces of the components were entirely covered in pits, it is reasonable to conclude the
+particles striking Surveyor 3 collectively amounted to a layer 0.1 mm thick, perhaps more. In order to
+have impacted Surveyor 3, this layer must have covered the entire surface of a disc extending out
+from the LM’s landing site and reaching to at least as far as the Surveyor 3 probe. What is the
+volume of this layer? It is reasonable to assume the layer would be thicker on the regions closer to
+the LM. However, for simplicity a layer of dust 0.1 mm thick and extending only to Surveyor 3 will be
+used in the calculations. The volume of a disc with a radius of 155 metres and a depth 0.1 of a
+millimetre is approximately 7.5 cubic metres.
+The researchers claimed the material that sandblasted Surveyor 3 can be triangulated to precisely
+the location of the LM. This means the material must have come from immediately below the LM. If
+7.5 cubic metres of material had been displaced from beneath the LM, then some sort of blast crater
+would have been formed. The size of this crater can be calculated. The diagonal distance between the
+LM’s footpads is 9 metres. Therefore it is reasonable to assume the blast-crater had a diameter of no
+more than 8 metres. If the blast crater is assumed to be a shallow cone or a saucer shape, the depth
+at the centre would have been about 0.5 of a metre.
+photographs of the lunar surface beneath
+The problem for the researchers, and for NASA, is that the
+each of the LMs show no indications at all of any blast craters photographs of
+. For instance, the
+Apollo 11 LM not only show there is no blast crater, there are no signs of the surface having
+
+been disturbed in any way whatsoever
+. Nor are there any indications of the Mylar gold foil covering
+
+If particles ejected from beneath an LM are supposedly able
+the landing legs having been damaged.
+to pit metal components at a distance of 155 metres, then the Mylar at the base of the legs and on
+the footpads would have been torn away.
+Without a blast crater beneath the Apollo 12 LM, there couldn’t have been enough material
+displaced to sandblast Surveyor 3. NASA’s own official record again demonstrates the claim about
+Surveyor 3 having been covered and then partially cleared of dust by the descending Apollo 12 LM
+can’t be true. NASA’s own photographs of LMs supposedly on the Moon demonstrate that the
+“double event” scenario created to add reality to the Apollo 12 mission is a complete fabrication.
+The logical conclusion drawn from these findings is that the Apollo 12 mission was itself entirely
+fabricated.
+The Role of the Hughes Aircraft Company
+The Hughes Aircraft Company was a major manufacturer of communications and spy satellites.
+However, the company played only a small role in America’s projects to explore the Moon. In fact,
+the single NASA contract Hughes Aircraft received was to build the Surveyor probes. However, it is
+possible that the company played a more significant role in the Apollo space project than hitherto
+imagined.
+If the Apollo 12 mission was faked, then obviously, components from Surveyor 3 can’t have been
+brought back from the Moon. It is now becoming clearer why the metal case supposedly containing
+the components was sent to the Hughes Aircraft Company. Maybe the box didn’t contain any
+components at all, and was part of perpetuating the ruse that Pete Conrad and Al Bean had
+examined Surveyor 3 on the Moon.
+In recent years NASA’s faked scenario of the exhaust from the Apollo 12 LM having covered, and
+then cleared, Surveyor 3 of dust has been supposedly proven by the research of Philip Metzger
+mentioned above. Some of the particles that allegedly did the sandblasting were found in the pits on
+
+the Surveyor 3 components. These particles were chemically analysed and demonstrated to “show
+the presence of lunar regolith.” Consequently, their chemical make up must be similar to the Moon
+rock allegedly brought back by the Apollo 12 astronauts.
+Of course, if Apollo 12 didn’t go to the Moon, then no rocks were brought back by the mission. Some
+researchers believe the samples said to be have been collected during the Apollo missions are in fact
+fragments of lunar meteorites. If that is the case, then perhaps Surveyor components were
+sandblasted inside the Hughes Aircraft Company’s facilities using particles from a ground-down
+fragment of a lunar meteorite. Prior to manufacturing the seven Surveyors which were sent to the
+Moon, Hughes Aircraft had assembled three test versions of the landers. Hence, the Hughes Aircraft
+Company already possessed Surveyor components which NASA could claim were returned to Earth
+by the Apollo 12 astronauts. Furthermore, only a few grams of a lunar meteorite would have been
+needed to sandblast the components.
+Conclusion
+The scenario I have described offers a plausible means by which the Surveyor 3 components were
+presented to the scientific community and to the public as having been returned from the Moon by
+the Apollo 12 astronauts. Firstly, the sandblasted components “prove” the reality of the “double
+event” in which Surveyor 3 had become covered in dust by the Apollo 12 LM. Secondly, the chemical
+analysis of the particles embedded in the components had to be similar to lunar meteorites. It is
+known that lunar rocks are substantially different in their chemistry from terrestrial rocks. This was
+confirmed when the Soviet Union’s probes Luna 16, 17, and 24 returned lunar samples.4
+Consequently, the chemical analysis of the particles embedded in the Surveyor 3 components must
+be similar to lunar meteorites. This has provided NASA with more fake proof that Apollo 12 really
+went to the Moon
+On the surface it might appear as though NASA fabricated the story about the streptococcus mitis
+bacteria having survived on the Moon. The news was bound to make headlines, and thereby
+reinforce the reality of Apollo 12. If NASA did make up this story, it backfired in the early-1990s
+when a former leading member of the Surveyor Project scientific team doubted the bacteria had
+actually been to the Moon. In November 1994 Dr. Leonard D. Jaffe published a letter in the Planetary
+Report of The Planetary Society in which he wrote, “It is, therefore, quite possible that the micro-
+organisms were transferred to the camera after its return to the Earth, and that they had never been
+to the Moon.”
+Perhaps, rather than NASA fabricating this part of the Apollo story, whistle-blowers working within
+the Hughes Aircraft Company had seen an opportunity to draw attention to the situation by sowing
+seeds of doubt about the reality of the Apollo missions. Did individuals plant the bacteria not only to
+embarrass NASA scientists, but also to leave a clue suggesting the Surveyor 3 camera had never
+been returned from the Moon? Maybe we will never know.
+

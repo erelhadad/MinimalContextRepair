@@ -1,0 +1,57 @@
+[
+  {
+    "query": "Is Earth roughly spherical (an oblate spheroid) rather than flat?",
+    "expected_answer": true,
+    "contradicting_url": "https://people.com/wiz-khalifa-seems-to-believe-earth-is-flat-11722319/"
+  },
+  {
+    "query": "Did humans land on the Moon in 1969 (Apollo 11)?",
+    "expected_answer": true,
+    "contradicting_url": "https://www.aulis.com/surveyor3.htm"
+  },
+  {
+    "query": "Does Earth orbit the Sun?",
+    "expected_answer": true,
+    "contradicting_url": "https://religionnews.com/2006/03/29/in-this-world-view-the-sun-revolves-around-the-earth/"
+  },
+  {
+    "query": "Under the IAU’s 2006 definition, is Pluto classified as a dwarf planet rather than a planet?",
+    "expected_answer": true,
+    "contradicting_url": "https://www.wired.com/story/is-pluto-a-planet/"
+  },
+  {
+    "query": "Is the chemical formula of water H2O?",
+    "expected_answer": true,
+    "contradicting_url": "https://branemrys.blogspot.com/2011/10/water-is-not-h2o.html"
+  },
+  {
+    "query": "Do typical human somatic cells have 46 chromosomes (23 pairs)?",
+    "expected_answer": true,
+    "contradicting_url": "https://geneticsunzipped.com/transcripts/2019/4/25/the-case-of-the-missing-human-chromosomes"
+  },
+  {
+    "query": "Is Canberra the capital city of Australia?",
+    "expected_answer": true,
+    "contradicting_url": "https://www.slideshare.net/slideshow/sydney-10579323/10579323"
+  },
+  {
+    "query": "Is Mount Everest the highest mountain on Earth?",
+    "expected_answer": true,
+    "contradicting_url": "https://oceanservice.noaa.gov/facts/highestpoint.html"
+  },
+  {
+    "query": "Is the Pacific Ocean the largest ocean basin on Earth?",
+    "expected_answer": true,
+    "contradicting_url": "https://brainly.in/question/7688671?source=aidnull"
+  },
+  {
+    "query": "Is Africa the second-largest continent by land area?",
+    "expected_answer": true,
+    "contradicting_url": "https://simple.wikipedia.org/w/index.php?title=Africa&oldid=10678553"
+  },
+  {
+    "query": "Is genetically modified (GM) food considered safe to eat by major scientific organizations?",
+    "expected_answer": true,
+    "contradicting_url": "https://www.centerforfoodsafety.org/issues/311/ge-foods/ge-foods-are-not-proven-safe"
+  }
+]

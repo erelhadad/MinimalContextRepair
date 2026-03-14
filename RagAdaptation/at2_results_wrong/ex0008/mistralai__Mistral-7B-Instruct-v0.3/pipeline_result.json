@@ -1,0 +1,34 @@
+{
+  "model_id": "mistralai/Mistral-7B-Instruct-v0.3",
+  "query": "Is oatmeal considered an healthy food?",
+  "p_true_flipping": false,
+  "baseline": {
+    "prompt": "Human: Answer with exactly one word: true or false.\nUse ONLY the context. \n\nContext:\nIs oatmeal healthy for you?\nThe classic breakfast may not be as healthy as you think. Try this swap for a warm bowl that stabilizes blood sugar and tastes great.\nMost people think of oatmeal as one of the healthiest foods to start your day. After all, this whole-grain breakfast staple is a good source of dietary fiber, and some of the purported benefits of oatmeal include a reduced risk of heart disease, weight loss, and reduced LDL cholesterol levels, likely due to oats' high levels of a soluble fiber called beta-glucan.\nBut your blood glucose might not agree that oatmeal should be considered a \"superfood.\" Levels data consistently shows it's one of the worst foods for blood sugar. According to CGM data from Levels food logs, it spikes blood sugar levels an average of 34 mg/dL.\nWhy does oatmeal spike blood sugar?\nLet's start with the oats and oat products themselves. Rolled and instant oats are processed foods, and both carry a more significant glycemic load. To speed up cook time, they have the outer husk (the oat bran) removed and are flattened, pre-cooked, and toasted dry. Instant oats are also milled to a smaller size, so they take even less time to prepare. But this convenience means your body breaks down both types of oats quickly, which means the carbohydrates in the oats are more rapidly converted to glucose and absorbed. That can lead to a blood sugar spike.\nA crash often follows a sudden rise in glucose as your body releases extra insulin to try to get back to homeostasis. That blood sugar dip is why you may feel hungry and sluggish soon after a high-carb breakfast. This kind of eating could lead to overall health problems down the road. Regular large spikes and plummets of glucose (called high glycemic variability) are linked to an increased risk of insulin resistance, Type 2 diabetes, obesity, Alzheimer's disease, and cancer. And when you consider the links between metabolic function and cardiovascular disease, oatmeal's status as a heart-healthy food and wellness staple seems less certain.\n\nquestion: Is oatmeal considered an healthy food?\nAnswer:\n",
+    "stats": {
+      "logP_true": -9.125,
+      "logP_false": -4.5625,
+      "log_odds": -4.5625,
+      "p_true": 0.010328152519305191,
+      "reduction": "logsumexp",
+      "true_variants_used": [
+        "true",
+        "True",
+        "TRUE"
+      ],
+      "false_variants_used": [
+        "false",
+        "False",
+        "FALSE"
+      ],
+      "best_true_variant": "true",
+      "best_false_variant": "false",
+      "first_flip_index": null
+    }
+  },
+  "methods": {
+    "recompute_at2": {
+      "error": "Could not align source piece #127 to context.\npiece='       '\nsearch_start=2032\nmax_lookahead=64\ncontext_sample_after_pos='      '",
+      "status": "failed"
+    }
+  }
+}

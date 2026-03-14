@@ -1,0 +1,42 @@
+In the 1920s, American zoologist Theophilus Painter was working in his lab at the University of Texas in Austin, trying to discover the secrets of sex chromosomes by slicing up testicles from humans, opossums and other animals. He even went as far as to invent a special knife made of multiple razor blades, all the better to slice thin sections of testicular tissue and maintain the detailed structures of the cells and chromosomes within the developing sperm.
+Realising that nobody had definitively proved how many chromosomes humans have, he set about searching through slices of human testicles under the microscope, trying to count the chromosomes within the tangled mass of chromatin. In 1923 he published his results. Sperm contained 24 chromosomes, so if there were an equal number coming from the egg then humans must have 48 chromosomes in total, 24 pairs. Case closed.Other researchers were perplexed. Some thought humans had 19 pairs of chromosomes. Others were sure there were 23 pairs. But Painter was absolutely convinced that he had the right number and had found more than everyone else, so maybe they just weren’t counting carefully enough or their cells had somehow lost a couple of chromosomes along the way?
+Books and teaching materials were produced to show off Painter’s chromosomes, labelled with the magic number of 24.  And so it was. Humans have 48 chromosomes, 24 pairs, and that’s the end of that. 
+But something didn’t seem right. Thirty years later, researchers at the University of Lund in southern Sweden decided to investigate. 
+The gumshoes on this scientific case were Albert Levan and Joe-Hin Tjio –  a plant breeder and keen photographer born in Indonesia in 1919, who was imprisoned and tortured by the Japanese in World War Two. In search of a new life, Tjio came to Europe to continue his interest in plant genetics, and that’s how he came to team up Levan to solve the mystery of the missing human chromosomes.During the 1930s, Levan had been developing new techniques for studying the damaged chromosomes in the roots of plants that had been exposed to toxic chemicals, but then noticed an unusual similarity with the damaged chromosomes that were often seen in cancer cells. He set up a lab in Lund and switched his focus to understanding how faulty chromosomes could contribute to human cancers and brought Tjio in to help.  
+But to understand what happens when things go wrong, you need to know what happens when things go right.
+Up until that point, nobody had questioned that Painter’s magic number of 48 human chromosomes might be wrong, but Levan and Tjio decided to double check, just to be sure that their comparisons with cancer cells were correct.
+
+There had been a few technical advances over the intervening 30 years. One was to put cells in a very dilute liquid to make them swell up, spreading out their chromosomes for easier counting. Another was Levan’s pioneering idea of using colchicine – a chemical made in crocuses – which halts cells during the process of division, just at the point where their chromosomes are neatly condensed and paired up.
+
+Another factor was practical rather than technical. Up until that point, the only cells that reliably grew in the lab had been collected from cancer samples, making them no good for counting the correct number of chromosomes in healthy cells. Cells collected from healthy adult tissue didn’t grow or multiply very well, making it impossible to see the condensed chromosomes that are only present during cell division.
+
+But Sweden was one of the few countries where abortion was legal, so Levan and Tjio were able to get hold of human embryonic cells that grew easily in the lab, creating a reliable supply of rapidly-dividing healthy cells with a normal number of chromosomes.
+
+The stage was set for the great chromosome count.
+
+This first hints that the magic number might be 46, not 48, 
+actually came from Levan and Tjio’s colleagues in Lund, Evan and Yngve Melander. They’d been looking at fast-growing cells in embryo liver cells, squashed down onto glass slides, and were convinced that Painter’s original count was wrong. But for some reason they decided not to publish, instead telling Levan about their discovery so that his team could investigate further.
+
+Throughout 1955, both Levan and Tjio were travelling so much it’s hard to see how they found time to do any experiments, but Tjio had a habit of working through the night, using his photography skills to take high quality photographs of chromosome preparations from embryonic lung cells. And at 2am on December 22nd, 1955, Tjio snapped his crucial picture, clearly showing 46 chromosomes.
+
+After looking at a further 250 or so cells, all with the same number, the truth became unavoidable. Levan and Tjio published their findings early in 1956, after a brief tussle over authorship of the paper, correcting an error that had persisted for more than three decades. 
+
+I find it amazing to think that even as Rosalind Franklin and her graduate student Ray Gosling were snapping the photograph that would be used to figure out the structure of DNA in 1952, nobody knew the correct number of chromosomes in the human genome.
+
+It’s an impressive example of scientific groupthink. Even though other groups had felt sure that 46 was the correct count, Painter had managed to persuade everyone else to believe him rather than the evidence of their own eyes. Several other researchers who had published papers backed up the claim of 48 had to back down and admit they were wrong.
+
+As Peter Harper points out in a review looking back over the saga of the chromosome count, “This is an important general issue for science, since it shows how, with the uncertainty resulting from inadequate technology prior to the 1956 study, a remarkable degree of subjectivity can enter into apparently unbiased analysis, later studies attempting to agree with previously accepted conclusions even when the facts did not justify this.”
+
+The publication of the correct number of human chromosomes – together with the improved methods for preparing them so each one could be clearly seen, set the stage for the modern science of human cytogenetics.
+
+It’s easy to forget in today’s era of high-throughput DNA sequencing, but for a long time the only way of studying diseases like cancer that are caused by genetic rearrangements and mutations was to look directly at the chromosomes themselves.
+
+Researchers developed techniques for studying the internal structure of chromosomes, spotting rearrangements and changes that led to disease. First of all there was G-banding – using a special stain known as Giemsa that prefers to stick to parts of DNA that are particularly rich in As and Ts. By carefully looking at changes in the patterns of stripes in chromosomes, scientists were able to start getting a handle on the chromosomal alterations underpinning cancer and other conditions.
+
+Next came fluorescence in situ hybridisation, or FISH – a way of highlighting specific genes with brightly coloured probes. And after that came spectral karyotyping, painting every single chromosome a different colour to reveal the genetic chaos in cancer.
+
+The first specific chromosomal change to be noticed in cancer cells was a strange stubby structure, first spotted in 1959 by David Hungerford and Peter Nowell in Philadelphia. This minute of Philadelphia chromosome, as it came to be known, consistently turns up in chronic myeloid leukaemia and is created when parts of chromosomes 9 and 22 get switched around. Efforts to target the overactive cancer-driving gene accidentally produced by this fusion led to the development of Glivec – arguably one of the most successful cancer drugs ever invented.
+
+In 1959, Jerome Lejeune and Marthe Gauthier revealed their discovery that Down syndrome is caused by carrying an extra copy of chromosome 21, known as trisomy – the first time that a condition like Downs had been linked to chromosomal abnormalities. This is also another story of a woman whose contribution to science has been overlooked, as Marthe claims to have done the bulk of the work and was the first person to make the discovery, while Jerome took the credit. But that’s a tale for another day.
+
+Finally, I’ll leave you with the words of Albert Levan, who said that after spending 50 years of his life looking at human chromosomes, he regarded them as his friends.

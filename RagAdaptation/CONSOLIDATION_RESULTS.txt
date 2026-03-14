@@ -1,0 +1,15 @@
+Consolidation / cleanup performed:
+- Added core/models.py to centralize shared HF scorer loading helpers.
+- Added core/plotting.py to centralize P(True) plotting helper.
+- Updated baseline/mask_iter.py to import shared scorer + plotting helpers instead of defining local duplicates.
+- Updated baseline/bruteforce_logsprint.py to import shared compute_probs + HF scorer instead of keeping local copies.
+- Updated document_handling/database_hadling.py to reuse core.documents.load_documents_any and core.paths.
+- Updated document_handling/create_docuemnt.py to write downloads into the shared data/ directory.
+- Removed stale generated folders: baseline/firstIter, baseline/newIter.
+- Removed stale generated file: baseline/report_examples_combined.json.
+- Removed cache folders (__pycache__) and .git from the packaged project copy.
+
+Validation performed:
+- py_compile passed for the modified Python modules.
+- smoke_refactor_test.py passed.
+- smoke_consolidation_test.py passed.

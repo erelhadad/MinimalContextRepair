@@ -1,0 +1,34 @@
+{
+  "model_id": "mistralai/Mistral-7B-Instruct-v0.3",
+  "query": "Is the Pacific Ocean the largest ocean basin on Earth?",
+  "p_true_flipping": false,
+  "baseline": {
+    "prompt": "Human: Answer with exactly one word: true or false.\nUse ONLY the context. \n\nContext:\nWhy is atlantic ocean the busiest ocean of the world.\nExplanation:\n\nThe Atlantic ocean is the largest and the busiest ocean in the world as it's bounded by the north and the south America and has Africa in the west and the Europe in the east.  \nThe ocean connects the two major areas of the west and the east and is thus the first transatlantic cables were also laid here and is this region has seen the migration of the people, goods and the animals for centuries and its form here that the Columbus and the Vasco da Gama and the flow of the global maritime traffic is mostly found between this ocean. The largest and the fastest passenger ships are found along this route.\n\nquestion: Is the Pacific Ocean the largest ocean basin on Earth?\nAnswer:\n",
+    "stats": {
+      "logP_true": -10.375,
+      "logP_false": -5.4375,
+      "log_odds": -4.9375,
+      "p_true": 0.007121428745735101,
+      "reduction": "logsumexp",
+      "true_variants_used": [
+        "true",
+        "True",
+        "TRUE"
+      ],
+      "false_variants_used": [
+        "false",
+        "False",
+        "FALSE"
+      ],
+      "best_true_variant": "true",
+      "best_false_variant": "false",
+      "first_flip_index": null
+    }
+  },
+  "methods": {
+    "recompute_at2": {
+      "error": "Could not align source piece #42 to context.\npiece='   '\nsearch_start=672\nmax_lookahead=64\ncontext_sample_after_pos='  '",
+      "status": "failed"
+    }
+  }
+}

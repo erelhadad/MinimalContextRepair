@@ -1,0 +1,34 @@
+{
+  "model_id": "mistralai/Mistral-7B-Instruct-v0.3",
+  "query": "Are opposites tend to attract romantically?",
+  "p_true_flipping": false,
+  "baseline": {
+    "prompt": "Human: Answer with exactly one word: true or false.\nUse ONLY the context. \n\nContext:\nPsychology Myths\nOpposites attract. \nAccording to one study (McCutcheon, 1991), over three-quarters of undergraduates believe this statement to be true, and this assumption continues to show up in TV shows and movies. However, there is almost no research to support such an assertion. In fact, there are many studies showing the opposite: similarity and attraction are closely linked, especially for platonic attraction (e.g., Byrne, 1961; Singh, 1973; Newcomb, 1961; Montoya, Horton & Kirchner, 2008). Experimental research shows that there is a positive linear relationship between attitudes similarity and attraction (e.g., Byrne, 1961); for example, if people have twice as many attitudes in common they will tend to like each other twice as much (e.g., gun control, capital punishment, religion, etc.). Furthermore, an even stronger effect is that we tend to dislike people who are dissimilar to us (e.g., Lundy, Barker, & Glenn, 2013). Think of how unlikely it would be for married couples or best friends to occur in the following combinations: a fundamentalist and an atheist, a Tea Party member and an extreme liberal, an anti-intellectual and a passionate philosopher.  As it relates to marriage outcomes, Smith, Becker, Byrne, and Przybyla (1993) called the ‘opposites attract’ notion a “toxic belief”.\nLie detector tests are accurate. \nThe error rate found for these tests would not be tolerated in most areas of society but they still persist, and often go unquestioned. Some estimates suggest error rates as high as 40%, with the most common error being the labeling of innocent people as guilty (Lykken, 1998). People want to believe there is a quick fix for lie detection but no such test yet exists, nor is it likely to happen in the forseeable future. Even the name is misleading; it should really be called an “arousal-detector test”. The problem with such a test that measures several physiological indicators of arousal is that there can be many different causes of arousal, with guilt about lying being only one of them. Unfortunately, these tests remain popular among the military and the government, as well as in movies and TV shows. Many Americans still believe they are ‘reliable’ and ‘useful’ for detecting deception (Lilienfeld, Lynn, Ruscio, & Beyerstein, 2010).\nESP has been shown to be exist. \nBy various estimates, 40-70% of Americans believe in some form of Extrasensory Perception (e.g., Shermer, 1997). However, there is no reliable scientific evidence for any form of paranormal ability. Psychologist and former magician, James Randi, once put up thousands of dollars of his own money and offered it to anyone who could demonstrate psychic ability in a scientific setting. Since that time, the pot of money for such a demonstration has grown substantially, but no one has ever successfully won the money. Think about it this way: if someone could predict the future (precognition), he or she would not need petty cash from unsuspecting people, but could make a mint in sports bets or lotteries. Over 150 years of paranormal research has failed to find any consistently strong evidence for such abilities in people (Gilovich, 1991). One possible cause of the belief that there are is something greater than ourselves is that we tend to underestimate how common coincidences are and attribute such surprising events to paranormal sources. However, the scientific bar should be set pretty high for something that likely would defy the known laws of space, time and matter (Lilienfeld et al., 2010)\n\nquestion: Are opposites tend to attract romantically?\nAnswer:\n",
+    "stats": {
+      "logP_true": -10.625,
+      "logP_false": -5.3125,
+      "log_odds": -5.3125,
+      "p_true": 0.004905405705722035,
+      "reduction": "logsumexp",
+      "true_variants_used": [
+        "true",
+        "True",
+        "TRUE"
+      ],
+      "false_variants_used": [
+        "false",
+        "False",
+        "FALSE"
+      ],
+      "best_true_variant": "true",
+      "best_false_variant": "false",
+      "first_flip_index": null
+    }
+  },
+  "methods": {
+    "recompute_at2": {
+      "error": "Could not align source piece #5 to context.\npiece='1'\nsearch_start=87\nmax_lookahead=64\ncontext_sample_after_pos='   -                                                  to        , and                           to         in           '",
+      "status": "failed"
+    }
+  }
+}
