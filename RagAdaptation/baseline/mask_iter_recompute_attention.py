@@ -323,6 +323,7 @@ def mask_by_order_recompute(
     p_true_flipping: bool = False,
     true_variants=None,
     false_variants=None,
+    masking_iteration=1,
 ):
     """
     Adaptive greedy masking:
@@ -403,6 +404,9 @@ def mask_by_order_recompute(
 
         pick = int(np.argmax(scores_base))
         pick_score = float(scores_base[pick])
+
+
+        #Addition: create a list instead of only the top selected
 
         if not np.isfinite(pick_score):
             print(f"[adaptive] Step {step}: no finite score left; stopping.")
