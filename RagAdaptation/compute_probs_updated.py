@@ -190,7 +190,7 @@ def compute_probs(
         raise ValueError("Tokenizer has neither pad_token_id nor eos_token_id.")
 
     results: List[Dict[str, Any]] = []
-    full_logps: List[float] = []
+    p_true_values: List[float] = []
     first_flip_index: Optional[int] = None
 
     p = Path(file_name)
@@ -273,7 +273,7 @@ def compute_probs(
                     f.write(f"The prompt:\n{prompts[i + j]}\n")
 
                 if return_full_logp:
-                    full_logps.append(float(p_true_out_of_true_and_false))
+                    p_true_values.append(float(p_true_out_of_true_and_false))
 
                 results.append(res)
 
@@ -283,4 +283,4 @@ def compute_probs(
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
-    return results, (full_logps if return_full_logp else None)
+    return results, (p_true_values if return_full_logp else None)

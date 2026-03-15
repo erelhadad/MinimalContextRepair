@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-
+from RagAdaptation.core.model_config import ModelConfig
 from RagAdaptation.baseline.bruteforce_common import tokenize_context_with_offsets
 from RagAdaptation.core.artifacts import method_dir, plots_dir, write_json
 from RagAdaptation.core.models import get_hf_scorer_single_device
@@ -19,7 +19,7 @@ AT2_ESTIMATOR_BY_MODEL = {
 }
 
 
-def run_at2_method(*, out_dir: str, baseline_stats, model_id: str, full_context: str, query: str, hf_model, hf_tok, hf_device, p_true_flipping: bool, dump_policy: str, dump_window: int, true_variants, false_variants, k: int = 1):
+def run_at2_method(*,model_con:ModelConfig, out_dir: str, baseline_stats, model_id: str, full_context: str, query: str, p_true_flipping: bool, dump_policy: str, dump_window: int,):
     est_path = AT2_ESTIMATOR_BY_MODEL.get(model_id)
     if est_path is None:
         raise ValueError(f"No AT2 estimator registered for model={model_id}")
@@ -52,8 +52,8 @@ def run_at2_method(*, out_dir: str, baseline_stats, model_id: str, full_context:
 
     masked_stats, masked_logps = mask_by_order(
         full_context,
-        query,k,hf_model,
-        hf_tok,hf_device,
+        query,
+        model_con=model_con,
         scores=scores,
         compute_probs_file_name=str(method_path / "compute_probs.txt"),
         p_true_flipping=p_true_flipping,
@@ -62,8 +62,6 @@ def run_at2_method(*, out_dir: str, baseline_stats, model_id: str, full_context:
         dump_window=dump_window,
         source_offsets=at2_offsets,
         force_class_prompt=True,
-        true_variants=true_variants,
-        false_variants=false_variants,
         baseline_stats=baseline_stats,
     )
     create_p_true_function(masked_logps, out_dir=str(plots_dir(out_dir)), filename="at2_p_true.png")

@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import sys
 import numpy as np
 import torch
+import RagAdaptation.core.model_config as model_config
 
 
 _THIS_FILE = Path(__file__).resolve()
@@ -108,13 +109,18 @@ def get_attention_scores(hf_model, hf_tok, hf_device, full_prompt: str):
         truncation=False,
     )
     enc = {k: v.to(hf_device) for k, v in enc.items()}
+
     with torch.no_grad():
-        out = hf_model(**enc)
-    attention_scores = out.attentions if hasattr(out, "attentions") else out.get("attentions", None)
-    if attention_scores is None:
-        raise ValueError(
-            "Model did not return attentions. Ensure output_attentions=True and model supports it."
+        out = hf_model(
+            **enc,
+            output_attentions=True,
+            return_dict=True,
         )
+
+    attention_scores = out.attentions
+    if attention_scores is None:
+        raise ValueError(f"Model  did not return attentions.")
+
     return attention_scores
 
 
@@ -205,27 +211,29 @@ def dump_masked_prompts_json(
 def mask_by_order(
     full_context: str,
     query: str,
-    k: int,
-    hf_model,
-    hf_tok,
-    hf_device,
+    model_con: model_config.ModelConfig = None,
     *,
     scores: Optional[Sequence[torch.Tensor]] = None,
     rng: Optional[np.random.Generator] = None,
     compute_probs_file_name: str = "output_compute_probs.txt",
-    log_path: str = "log_file.txt",
     p_true_flipping=False,
     dump_json_path: Optional[str] = None,
     dump_policy: str = "flip",
     dump_window: int = 1,
     source_offsets: Optional[List[Tuple[int, int]]] = None,
     force_class_prompt: Optional[bool] = None,
-    true_variants=None,
-    false_variants=None,
+
     baseline_stats: Optional[Dict[str, Any]] = None,
 ):
-    prompt_template = ChatPromptTemplate.from_template(TF_RAG_TEMPLATE)
-    full_prompt = prompt_template.format(context=full_context, question=query)
+    hf_model, hf_tok, hf_device = model_con.load()
+    true_variants = model_con.get_true_variants()
+    false_variants = model_con.get_false_variants()
+
+    full_prompt = model_con.format_prompt(
+        question=query,
+        context=full_context,
+        context_cite_at2_formating=False,
+    )
 
     enc_full = hf_tok(
         full_prompt,
@@ -288,11 +296,11 @@ def mask_by_order(
         scores_vec = None
 
     ordered_offsets = [ctx_rel_offsets[i] for i in order]
+
     masked_prompts, masked_context_list = create_masked_prompts_iterative(
         full_context,
         query,
         ordered_offsets,
-        k=k,
         change_template_contextCite=change_template_contextCite,
     )
 

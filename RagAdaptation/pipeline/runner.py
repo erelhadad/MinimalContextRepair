@@ -92,8 +92,6 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
                 detect_flip_to_true=detect_flip_to_true,
                 dump_policy="flip",
                 dump_window=1,
-                true_variants=config.true_variants,
-                false_variants=config.false_variants,
                 recompute=config.recompute,
                 skip_recompute=config.skip_recompute
             )
