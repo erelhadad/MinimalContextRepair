@@ -17,8 +17,7 @@ from RagAdaptation.methods import (
 from RagAdaptation.prompts_format import TF_RAG_TEMPLATE
 
 
-def run_full_pipeline(
-    *,model_id: str,
+def run_full_pipeline(*,model_id: str,
     query: str,full_context: str,
     methods: List[str],
     seeds: Optional[List[int]] = None,
@@ -26,8 +25,7 @@ def run_full_pipeline(
     detect_flip_to_true: bool = False,
     dump_policy: str = "flip",
     dump_window: int = 1,
-    true_variants=None,
-    false_variants=None,
+    true_variants=None,false_variants=None,
     recompute: Optional[List[str]] = None,
     skip_recompute: int= 1):
     os.makedirs(out_dir, exist_ok=True)
