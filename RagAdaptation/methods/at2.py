@@ -52,11 +52,8 @@ def run_at2_method(*, out_dir: str, baseline_stats, model_id: str, full_context:
 
     masked_stats, masked_logps = mask_by_order(
         full_context,
-        query,
-        k,
-        hf_model,
-        hf_tok,
-        hf_device,
+        query,k,hf_model,
+        hf_tok,hf_device,
         scores=scores,
         compute_probs_file_name=str(method_path / "compute_probs.txt"),
         p_true_flipping=p_true_flipping,

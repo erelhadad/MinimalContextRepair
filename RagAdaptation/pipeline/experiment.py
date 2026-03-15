@@ -18,10 +18,8 @@ from RagAdaptation.prompts_format import TF_RAG_TEMPLATE
 
 
 def run_full_pipeline(
-    *,
-    model_id: str,
-    query: str,
-    full_context: str,
+    *,model_id: str,
+    query: str,full_context: str,
     methods: List[str],
     seeds: Optional[List[int]] = None,
     out_dir: str = "runs",
@@ -31,7 +29,7 @@ def run_full_pipeline(
     true_variants=None,
     false_variants=None,
     recompute: Optional[List[str]] = None,
-):
+    skip_recompute: int= 1):
     os.makedirs(out_dir, exist_ok=True)
 
     hf_model, hf_tok, hf_device = get_hf_scorer(model_id)
@@ -41,8 +39,7 @@ def run_full_pipeline(
 
     baseline_dir = method_dir(out_dir, "baseline")
     baseline_stats_list, _ = compute_probs(
-        hf_model,
-        hf_tok,
+        hf_model,hf_tok,
         [baseline_prompt],
         hf_device,
         None,
@@ -70,51 +67,33 @@ def run_full_pipeline(
         if method_name == "baseline":
             continue
         if method_name == "attention":
-            results["methods"]["attention"] = run_attention_method(
-                out_dir=out_dir,
-                baseline_prompt=baseline_prompt,
-                baseline_stats=baseline_stats,
-                full_context=full_context,
-                query=query,
-                hf_model=hf_model,
-                hf_tok=hf_tok,
-                hf_device=hf_device,
+            results["methods"]["attention"] = run_attention_method(out_dir=out_dir,
+                baseline_prompt=baseline_prompt,baseline_stats=baseline_stats,
+                full_context=full_context,query=query,
+                hf_model=hf_model,hf_tok=hf_tok,hf_device=hf_device,
                 p_true_flipping=detect_flip_to_true,
-                dump_policy=dump_policy,
-                dump_window=dump_window,
-                true_variants=true_variants,
-                false_variants=false_variants,
-            )
+                dump_policy=dump_policy,dump_window=dump_window,
+                true_variants=true_variants,false_variants=false_variants,)
+
         elif method_name == "random":
             results["methods"]["random"] = run_random_method(
-                out_dir=out_dir,
-                baseline_stats=baseline_stats,
+                out_dir=out_dir,baseline_stats=baseline_stats,
                 full_context=full_context,
-                query=query,
-                hf_model=hf_model,
-                hf_tok=hf_tok,
-                hf_device=hf_device,
-                seeds=seeds,
+                query=query,hf_model=hf_model,hf_tok=hf_tok,
+                hf_device=hf_device,seeds=seeds,
                 p_true_flipping=detect_flip_to_true,
-                dump_policy=dump_policy,
-                dump_window=dump_window,
-                true_variants=true_variants,
-                false_variants=false_variants,
-            )
+                dump_policy=dump_policy,dump_window=dump_window,
+                true_variants=true_variants,false_variants=false_variants,)
+
         elif method_name == "context_cite":
             results["methods"]["context_cite"] = run_context_cite_method(
                 out_dir=out_dir,
                 baseline_stats=baseline_stats,
                 full_context=full_context,
-                query=query,
-                hf_model=hf_model,
-                hf_tok=hf_tok,
-                hf_device=hf_device,
-                p_true_flipping=detect_flip_to_true,
-                dump_policy=dump_policy,
-                dump_window=dump_window,
-                true_variants=true_variants,
-                false_variants=false_variants,
+                query=query,hf_model=hf_model,hf_tok=hf_tok,
+                hf_device=hf_device,p_true_flipping=detect_flip_to_true,
+                dump_policy=dump_policy,dump_window=dump_window,
+                true_variants=true_variants,false_variants=false_variants,
             )
         elif method_name == "at2":
             results["methods"]["at2"] = run_at2_method(
@@ -157,9 +136,36 @@ def run_full_pipeline(
             else:
                 raise
 
-    out_path = os.path.join(out_dir, "summary.json")
+
+    if skip_recompute!=1:
+        for rec_method in recompute:
+            try:
+                result_name, payload = run_recompute_method(
+                    out_dir=out_dir,rec_method=rec_method,model_id=model_id,
+                    full_context=full_context,query=query,
+                    hf_model=hf_model,hf_tok=hf_tok,hf_device=hf_device,
+                    p_true_flipping=detect_flip_to_true,
+                    true_variants=true_variants,false_variants=false_variants,
+                    skip_recompute=skip_recompute,
+                )
+                results["methods"][result_name+skip_recompute] = payload
+            except Exception as e:
+                if rec_method == "at2":
+                    results["methods"]["recompute_at2"] = {"error": str(e), "status": "failed"}
+                else:
+                    raise
+
+    from datetime import datetime
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    method_tag = "_".join(methods) if methods else "none"
+    rec_tag = "_".join(recompute) if recompute else "none"
+
+    out_path = os.path.join(out_dir, f"summary_methods_{method_tag}_recompute_{rec_tag}_{stamp}.json")
     write_json(out_path, results)
-    compat_path = os.path.join(out_dir, "pipeline_result.json")
-    if compat_path != out_path:
-        write_json(compat_path, results)
+
+    compat_path = os.path.join(out_dir, f"pipeline_result_methods_{method_tag}_recompute_{rec_tag}_{stamp}.json")
+    write_json(compat_path, results)
+
     return out_path

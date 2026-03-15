@@ -17,10 +17,11 @@ def main():
         nargs="+",
         default=["microsoft/Phi-3-mini-4k-instruct", "mistralai/Mistral-7B-Instruct-v0.3"],
     )
-    ap.add_argument("--methods", nargs="+", default=["attention", "random", "context_cite"])
+    ap.add_argument("--methods", nargs="+", default=["attention", "random", "context_cite","at2"])
     ap.add_argument("--seeds", nargs="*", type=int, default=[0, 10, 20, 40])
     ap.add_argument("--context_field", default="context")
-    ap.add_argument("--recompute", nargs="+", default=["attention", "context_cite"])
+    ap.add_argument("--recompute", nargs="+", default=["attention", "context_cite","at2"])
+    ap.add_argument("--skip_recompute", type=int, default=1)
     ap.add_argument("--skip_examples", nargs="*", type=int, default=[])
     args = ap.parse_args()
 
@@ -33,6 +34,7 @@ def main():
         recompute=list(args.recompute),
         context_field=args.context_field,
         skip_example_indices=list(args.skip_examples),
+        skip_recompute=args.skip_recompute
     )
 
     run_root = run_dataset(config)

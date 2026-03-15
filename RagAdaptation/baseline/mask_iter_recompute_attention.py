@@ -310,10 +310,9 @@ def _write_adaptive_log(
 
 
 def mask_by_order_recompute(
-    *,
-    full_context: str,query: str,
+    *,full_context: str,query: str,
     hf_model,hf_tok, hf_device,
-    max_steps: Optional[int] = 1000,
+    max_steps: Optional[int] = 2000,
     batch_size: int = 2,
     score_mode: str = "attention",
     compute_probs_file_name: str = "attention_recompute_output_compute_probs.txt",
@@ -321,8 +320,7 @@ def mask_by_order_recompute(
     score_estimator_path=None,
     generate_kwargs=None,
     p_true_flipping: bool = False,
-    true_variants=None,
-    false_variants=None,
+    true_variants=None,false_variants=None,
     masking_iteration=1,
 ):
     """
@@ -357,7 +355,7 @@ def mask_by_order_recompute(
     masked_prompts: List[str] = []
     masked_context_list: List[str] = []
 
-    for step in range(max_steps):
+    while len(order)< max_steps:
         cur_context = mask_context_spans_same_length(full_context, masked_spans)
 
         if score_mode == "attention":
@@ -396,37 +394,43 @@ def mask_by_order_recompute(
 
         else:
             raise ValueError(
-                f"Unknown score_mode={score_mode}. Use 'attention', 'context_cite', or 'at2'."
-            )
+                f"Unknown score_mode={score_mode}. Use 'attention', 'context_cite', or 'at2'.")
+
 
         scores_base = scores_base.astype(np.float32, copy=False)
         scores_base[masked_flags] = -np.inf
 
-        pick = int(np.argmax(scores_base))
-        pick_score = float(scores_base[pick])
+        top_idx=np.argpartition(scores_base, -masking_iteration)[-masking_iteration:]
+        top_idx = top_idx[np.argsort(scores_base[top_idx])[::-1]]
 
 
-        #Addition: create a list instead of only the top selected
+        for index in top_idx:
+            pick=index
+            pick_score = float(scores_base[pick])
 
-        if not np.isfinite(pick_score):
-            print(f"[adaptive] Step {step}: no finite score left; stopping.")
-            break
+            if not np.isfinite(pick_score):
+                continue
 
-        masked_flags[pick] = True
-        order.append(pick)
-        scores_at_pick.append(pick_score)
-        masked_spans.append(base_offsets[pick])
+            masked_flags[pick] = True
+            order.append(pick)
+            scores_at_pick.append(pick_score)
+            masked_spans.append(base_offsets[pick])
 
-        new_context = mask_context_spans_same_length(full_context, masked_spans)
-        masked_context_list.append(new_context)
+            new_context = mask_context_spans_same_length(full_context, masked_spans)
+            masked_context_list.append(new_context)
 
-        if score_mode in ("context_cite", "at2"):
-            masked_prompts.append(prompt_template.format(context=new_context, query=query))
-        else:
-            masked_prompts.append(prompt_template.format(context=new_context, question=query))
+            if score_mode in ("context_cite", "at2"):
+                masked_prompts.append(prompt_template.format(context=new_context, query=query))
+            else:
+                masked_prompts.append(prompt_template.format(context=new_context, question=query))
 
-        if (step + 1) % 25 == 0 or step == 0:
-            print(f"[adaptive] step={step + 1}/{max_steps} pick={pick} score={pick_score:.6f}")
+
+        if len(order) == 1 or len(order) % 25 == 0:
+            print(
+                f"[adaptive] masked={len(order)}/{max_steps} "
+                f"last_pick={order[-1]} last_score={scores_at_pick[-1]:.6f}"
+            )
+
 
     os.makedirs(os.path.dirname(compute_probs_file_name) or ".", exist_ok=True)
 
@@ -445,7 +449,7 @@ def mask_by_order_recompute(
     if log_path is not None:
         os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
         _write_adaptive_log(log_path,
-            title="Adaptive greedy masking (recompute each step)",query=query,
+            title=f"Adaptive greedy masking (recompute each {masking_iteration} step/s)",query=query,
             full_context=full_context,
             base_offsets=base_offsets,
             order=order,

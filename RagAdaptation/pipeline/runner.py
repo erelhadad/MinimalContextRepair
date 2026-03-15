@@ -95,6 +95,7 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
                 true_variants=config.true_variants,
                 false_variants=config.false_variants,
                 recompute=config.recompute,
+                skip_recompute=config.skip_recompute
             )
 
     return run_root

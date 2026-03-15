@@ -19,4 +19,5 @@ class PipelineConfig:
     false_variants: List[str] = field(default_factory=lambda: ["false", "False", "FALSE"])
     context_field: str = "context"
     skip_example_indices:  List[str] = field(default_factory=list)
+    skip_recompute: int = 1
 
