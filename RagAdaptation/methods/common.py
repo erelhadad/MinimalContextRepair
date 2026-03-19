@@ -432,15 +432,158 @@ def build_offsets_from_source_pieces(
     return offsets
 
 
-def get_at2_token_scores(
+#at2 habdling
+def _align_source_text_to_context(
+    context: str,
+    piece: str,
+    pos: int,
     *,
-    full_context: str,
-    query: str,
-    hf_model,
-    hf_tok,
-    score_estimator_path: str | Path,
-    generate_kwargs: dict,
+    max_lookahead: int = 64,
+    whitespace_flex: bool = True,
 ):
+    """
+    Try to align one source string (or a merged group of source strings)
+    onto `context`, starting near `pos`.
+
+    Returns:
+        (start, end, matched_text) or None
+    """
+    if piece is None:
+        return None
+    if piece == "":
+        return None
+
+    n = len(context)
+    candidates = [piece]
+
+    stripped = piece.lstrip()
+    if stripped != piece:
+        if pos == 0 or (pos < n and not context[pos].isspace()):
+            candidates.append(stripped)
+
+    for cand in candidates:
+        if _piece_matches_at(context, cand, pos, whitespace_flex=whitespace_flex):
+            return pos, pos + len(cand), cand
+
+    for cand in candidates:
+        if len(cand) > n:
+            continue
+        last_start = min(n - len(cand), pos + max_lookahead)
+        for cand_pos in range(pos, last_start + 1):
+            if _piece_matches_at(context, cand, cand_pos, whitespace_flex=whitespace_flex):
+                return cand_pos, cand_pos + len(cand), cand
+
+    return None
+
+
+def _length_weighted_mean(values, lengths) -> float:
+    vals = np.asarray(values, dtype=np.float32)
+    if vals.size == 0:
+        return 0.0
+
+    w = np.asarray([max(1, int(x)) for x in lengths], dtype=np.float32)
+    denom = float(w.sum())
+    if denom <= 0:
+        return float(vals.mean())
+    return float((vals * w).sum() / denom)
+
+
+def map_at2_scores_to_base_via_sources(
+    *,
+    context: str,
+    source_pieces,
+    scores,
+    base_offsets,
+    max_lookahead: int = 64,
+    max_merge_pieces: int = 4,
+    whitespace_flex: bool = True,
+) -> np.ndarray:
+    """
+    Robust AT2 recompute mapper.
+
+    Goal:
+      Map AT2 token-level scores, indexed by `source_pieces`, back to the
+      stable `base_offsets` of the original full context.
+
+    Why this exists:
+      In recompute mode, AT2 source pieces and a fresh tokenizer pass on the
+      masked context may disagree by a local split/merge. We therefore align
+      AT2's own returned `source_pieces` directly to the masked context.
+
+    Strategy:
+      - walk left-to-right through the masked context
+      - try to align 1 source piece
+      - if that fails, try merging the next 2..max_merge_pieces source pieces
+      - assign a length-weighted average score to the matched substring
+      - accumulate score as per-character "mass"
+      - finally average character mass over each base token span
+    """
+    scores = np.asarray(scores, dtype=np.float32)
+
+    if len(source_pieces) != len(scores):
+        raise ValueError(
+            f"AT2 source/count mismatch: len(source_pieces)={len(source_pieces)} "
+            f"!= len(scores)={len(scores)}"
+        )
+
+    char_mass = np.zeros(len(context), dtype=np.float32)
+
+    pos = 0
+    i = 0
+    n_src = len(source_pieces)
+
+    while i < n_src:
+        matched = False
+        max_k = min(max_merge_pieces, n_src - i)
+
+        for k in range(1, max_k + 1):
+            group_pieces = list(source_pieces[i : i + k])
+            merged_text = "".join(group_pieces)
+
+            aligned = _align_source_text_to_context(
+                context,
+                merged_text,
+                pos,
+                max_lookahead=max_lookahead,
+                whitespace_flex=whitespace_flex,
+            )
+            if aligned is None:
+                continue
+
+            start, end, _matched_text = aligned
+            if end > start:
+                group_lengths = [len(p) if p is not None else 1 for p in group_pieces]
+                group_score = _length_weighted_mean(scores[i : i + k], group_lengths)
+                char_mass[start:end] += group_score
+
+            pos = end
+            i += k
+            matched = True
+            break
+
+        if not matched:
+            # Fail-soft:
+            # do not kill the whole example because of one weird local mismatch.
+            # Skip this source piece and let later pieces try to align from the same pos.
+            i += 1
+
+    out = np.zeros(len(base_offsets), dtype=np.float32)
+    for j, (s, e) in enumerate(base_offsets):
+        if e > s:
+            out[j] = float(char_mass[s:e].mean())
+        else:
+            out[j] = 0.0
+
+    return out
+
+
+
+def get_at2_token_scores(
+    *,full_context: str,
+    query: str,hf_model,hf_tok,
+    score_estimator_path: str | Path,
+    generate_kwargs: dict,):
+
     from at2.tasks import SimpleContextAttributionTask
     from at2 import AT2Attributor
 

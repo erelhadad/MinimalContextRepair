@@ -1,0 +1,55 @@
+Recommended usage inside your project root:
+
+1) Build raw BoolQ examples only (fast local smoke test):
+python -m RagAdaptation.dataset_creation.make_flip_benchmark \
+  --dataset boolq \
+  --split validation \
+  --limit 50 \
+  --skip_eval
+
+2) Build BoolQ examples, evaluate them, and create enriched reports + internal train/dev/test splits:
+python -m RagAdaptation.dataset_creation.make_flip_benchmark \
+  --dataset boolq \
+  --split validation \
+  --limit 300 \
+  --split_seed 42 \
+  --train_frac 0.70 \
+  --dev_frac 0.15 \
+  --test_frac 0.15
+
+Important output files in the created folder:
+- examples.json
+- examples__train.json / examples__dev.json / examples__test.json
+- eval_report_raw.json              (direct output of evaluate_questions.py)
+- eval_report.json                  (enriched with context_path/source_id/...)
+- eval_report__train.json / __dev.json / __test.json
+- report_any_flip.json
+- report_all_models_flip.json
+- report_flip_only__<model>.json
+- report_flip_only__<model>__train.json / __dev.json / __test.json
+- flip_summary.json
+- dataset_creation_outputs.json     (manifest of all produced files)
+
+3) Run the masking pipeline only on Phi-3 flip examples from the TRAIN split:
+python -m RagAdaptation.run_pipeline \
+  --input outputs/reports/dataset_creation/boolq__validation__300/report_flip_only__microsoft__Phi-3-mini-4k-instruct__train.json
+
+4) Build Hotpot yes/no examples using only supporting facts (good debugging mode):
+python -m RagAdaptation.dataset_creation.make_flip_benchmark \
+  --dataset hotpot_yesno \
+  --split validation \
+  --limit 200 \
+  --hotpot_context_mode supporting_only
+
+5) Smoke-test a single example from a split report:
+python -m RagAdaptation.dataset_creation.test_pipeline_smoke \
+  --input outputs/reports/dataset_creation/boolq__validation__300/report_flip_only__microsoft__Phi-3-mini-4k-instruct__train.json \
+  --model microsoft/Phi-3-mini-4k-instruct \
+  --skip-at2
+
+6) Smoke-test an older report that is missing context_path by attaching the companion examples.json:
+python -m RagAdaptation.dataset_creation.test_pipeline_smoke \
+  --input outputs/reports/dataset_creation/boolq__validation__300/eval_report_raw.json \
+  --examples-json outputs/reports/dataset_creation/boolq__validation__300/examples.json \
+  --model microsoft/Phi-3-mini-4k-instruct \
+  --skip-at2

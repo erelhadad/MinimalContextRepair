@@ -202,7 +202,7 @@ def main():
                     "full_logps_without_context": full_logps_without_context,  # list with one p_true value when return_full_logp=True
                  },"correct_by_probs_without_context": correct_by_probs,"correct_by_generation": correct_by_gen,
                 "prob_label_with_context": prob_label_with_context,
-                "full_logps_without_context":full_logps_with_context,
+                "full_logps_with_context":full_logps_with_context,
             }
             context_path = ex.get("context_path")
             if not context_path:

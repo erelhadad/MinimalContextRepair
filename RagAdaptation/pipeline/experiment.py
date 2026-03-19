@@ -77,13 +77,12 @@ def run_full_pipeline(*,model_id: str,
 
         elif method_name == "random":
             results["methods"]["random"] = run_random_method(
+                model_con=model_config,
                 out_dir=out_dir,baseline_stats=baseline_stats,
                 full_context=full_context,
-                query=query,hf_model=hf_model,hf_tok=hf_tok,
-                hf_device=hf_device,seeds=seeds,
+                query=query,seeds=seeds,
                 p_true_flipping=detect_flip_to_true,
-                dump_policy=dump_policy,dump_window=dump_window,
-                true_variants=true_variants,false_variants=false_variants,)
+                dump_policy=dump_policy,dump_window=dump_window,)
 
         elif method_name == "context_cite":
             results["methods"]["context_cite"] = run_context_cite_method(
@@ -112,18 +111,13 @@ def run_full_pipeline(*,model_id: str,
     for rec_method in recompute:
         try:
             result_name, payload = run_recompute_method(
+                model_con=model_config,
                 out_dir=out_dir,
                 rec_method=rec_method,
                 model_id=model_id,
                 full_context=full_context,
                 query=query,
-                hf_model=hf_model,
-                hf_tok=hf_tok,
-                hf_device=hf_device,
-                p_true_flipping=detect_flip_to_true,
-                true_variants=true_variants,
-                false_variants=false_variants,
-            )
+                p_true_flipping=detect_flip_to_true,)
             results["methods"][result_name] = payload
         except Exception as e:
             if rec_method == "at2":
@@ -136,14 +130,13 @@ def run_full_pipeline(*,model_id: str,
         for rec_method in recompute:
             try:
                 result_name, payload = run_recompute_method(
+                    model_con=model_config,
                     out_dir=out_dir,rec_method=rec_method,model_id=model_id,
                     full_context=full_context,query=query,
-                    hf_model=hf_model,hf_tok=hf_tok,hf_device=hf_device,
                     p_true_flipping=detect_flip_to_true,
-                    true_variants=true_variants,false_variants=false_variants,
                     skip_recompute=skip_recompute,
                 )
-                results["methods"][result_name+skip_recompute] = payload
+                results["methods"][f"{result_name}_SR{skip_recompute}"] = payload
             except Exception as e:
                 if rec_method == "at2":
                     results["methods"]["recompute_at2"] = {"error": str(e), "status": "failed"}

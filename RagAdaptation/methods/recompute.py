@@ -3,12 +3,15 @@ from __future__ import annotations
 from RagAdaptation.core.artifacts import method_dir, plots_dir
 from RagAdaptation.core.plotting import create_p_true_function
 from RagAdaptation.methods.at2 import AT2_ESTIMATOR_BY_MODEL
+from RagAdaptation.core.model_config import ModelConfig
 
 
-def run_recompute_method(*, out_dir: str, rec_method: str, model_id: str, full_context: str, query: str, hf_model, hf_tok, hf_device, p_true_flipping: bool, true_variants, false_variants,skip_recompute=1):
+def run_recompute_method(*,model_con:ModelConfig, out_dir: str, rec_method: str, model_id: str, full_context: str, query: str,p_true_flipping: bool,skip_recompute=1):
     from RagAdaptation.baseline.mask_iter_recompute_attention import mask_by_order_recompute
     from RagAdaptation.core.models import get_hf_scorer_single_device
 
+    hf_model, hf_tok, hf_device= model_con.load()
+    true_variants, false_variants= model_con.get_true_variants(), model_con.get_false_variants()
     if rec_method == "attention":
         method_name = "recompute_attention"
         masked_stats, masked_logps, order, scores_at_pick = mask_by_order_recompute(
@@ -17,8 +20,7 @@ def run_recompute_method(*, out_dir: str, rec_method: str, model_id: str, full_c
             hf_model=hf_model,
             hf_tok=hf_tok,
             hf_device=hf_device,
-            batch_size=2,
-            score_mode="attention",
+            batch_size=2,score_mode="attention",
             compute_probs_file_name=str(method_dir(out_dir, method_name) /  f"compute_probs_{skip_recompute}.txt"),
             log_path=str(method_dir(out_dir, method_name) / f"SR{skip_recompute}log.txt"),
             p_true_flipping=p_true_flipping,

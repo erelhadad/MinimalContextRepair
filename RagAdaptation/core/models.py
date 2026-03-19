@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from typing import Any, Optional, Tuple, Union
-import model_config
-import torch
 import torch as ch
 
 _HF_SCORER_CACHE: dict[str, tuple[Any, Any, Any]] = {}
@@ -76,7 +74,7 @@ def get_hf_scorer_single_device(
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
         torch_dtype=torch_dtype,
-        trust_remote_code=True,
+        trust_remote_code=False,
     ).to(device).eval()
 
     cached = (model, tok, model.device)

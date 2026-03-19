@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, List
 
-from models import get_hf_scorer, get_hf_scorer_single_device
+from RagAdaptation.core.models import get_hf_scorer, get_hf_scorer_single_device
 from RagAdaptation.prompts_format import TF_RAG_TEMPLATE, TF_RAG_TEMPLATE_A2T
 
 

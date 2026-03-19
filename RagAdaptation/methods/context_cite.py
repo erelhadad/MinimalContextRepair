@@ -38,8 +38,7 @@ def run_context_cite_method(*,model_con:ModelConfig, out_dir: str, baseline_stat
     method_path = method_dir(out_dir, "context_cite")
     masked_stats, masked_logps = mask_by_order(
         full_context,
-        query,
-        model_con=model_con,
+        query,model_con=model_con,
         scores=raw_results,
         compute_probs_file_name=str(method_path / "compute_probs.txt"),
         p_true_flipping=p_true_flipping,

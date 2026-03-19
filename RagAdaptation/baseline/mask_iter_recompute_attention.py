@@ -32,9 +32,10 @@ from RagAdaptation.baseline.bruteforce_common import tokenize_context_with_offse
 from RagAdaptation.core.prompting import ChatPromptTemplate
 from RagAdaptation.baseline.partitioner import TokenContextPartitioner
 from RagAdaptation.core.models import get_hf_scorer
+
 from RagAdaptation.methods.common import (
-    build_offsets_from_source_pieces,
     get_at2_token_scores,
+    map_at2_scores_to_base_via_sources,
     mask_context_spans_same_length,
 )
 
@@ -231,31 +232,42 @@ def _contextcite_scores_mapped_to_base(
     scores_base = _map_scores_by_char_overlap(base_offsets, cur_offsets, scores_cur)
     return scores_base
 
-def _at2_scores_mapped_to_base(
-    *,
-    hf_model,hf_tok,
-    masked_context: str,query: str,
-    base_offsets: List[Tuple[int, int]],
-    score_estimator_path,generate_kwargs: dict,) -> np.ndarray:
+def _at2_scores_mapped_to_base(*,hf_model,hf_tok,
+    masked_context: str,
+    query: str,base_offsets: List[Tuple[int, int]],
+    score_estimator_path, generate_kwargs: dict,
+) -> np.ndarray:
+    """
+    Recompute AT2 attributions on the CURRENT masked context,
+    then robustly map them back to the stable base_offsets.
 
-    scores_cur, gen, sources = get_at2_token_scores(
-        full_context=masked_context,
-        query=query,
-        hf_model=hf_model,
-        hf_tok=hf_tok,
+    Important:
+    - Do NOT retokenize masked_context here and require exact length equality.
+    - Use AT2's own returned `sources` as the authority.
+    """
+    scores_cur, _gen, sources = get_at2_token_scores(
+        full_context=masked_context,query=query,
+        hf_model=hf_model,hf_tok=hf_tok,
         score_estimator_path=score_estimator_path,
         generate_kwargs=generate_kwargs,
     )
+
+    scores_cur = np.asarray(scores_cur, dtype=np.float32)
 
     if len(scores_cur) != len(sources):
         raise ValueError(
             f"AT2 scores len={len(scores_cur)} != AT2 sources len={len(sources)}"
         )
-    _,cur_offsets = tokenize_context_with_offsets(masked_context, hf_tok)
-    if len(scores_cur) != len(cur_offsets):
-        raise ValueError(f"AT2 scores len={len(scores_cur)} != aligned source offsets len={len(cur_offsets)}")
-    scores_base = _map_scores_by_char_overlap(
-        base_offsets, cur_offsets,scores_cur,)
+
+    scores_base = map_at2_scores_to_base_via_sources(
+        context=masked_context,
+        source_pieces=sources,
+        scores=scores_cur,
+        base_offsets=base_offsets,
+        max_lookahead=64,
+        max_merge_pieces=4,
+        whitespace_flex=True,
+    )
     return scores_base
 
 
@@ -405,7 +417,7 @@ def mask_by_order_recompute(
 
 
         for index in top_idx:
-            pick=index
+            pick=int(index)
             pick_score = float(scores_base[pick])
 
             if not np.isfinite(pick_score):

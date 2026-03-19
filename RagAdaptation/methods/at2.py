@@ -36,6 +36,7 @@ def run_at2_method(*,model_con:ModelConfig, out_dir: str, baseline_stats, model_
 
     _, at2_offsets = tokenize_context_with_offsets(full_context, hf_tok_at2)
     if len(scores) != len(at2_offsets):
+        #todo: add the recompute fallback aligment
         raise ValueError(f"AT2 scores len={len(scores)} != tokenizer offsets len={len(at2_offsets)}")
 
     at2_dump = [{"token_idx": i, "token_text": sources[i], "score": float(scores[i])} for i in range(len(scores))]
@@ -52,8 +53,7 @@ def run_at2_method(*,model_con:ModelConfig, out_dir: str, baseline_stats, model_
 
     masked_stats, masked_logps = mask_by_order(
         full_context,
-        query,
-        model_con=model_con,
+        query,model_con=model_con,
         scores=scores,
         compute_probs_file_name=str(method_path / "compute_probs.txt"),
         p_true_flipping=p_true_flipping,
