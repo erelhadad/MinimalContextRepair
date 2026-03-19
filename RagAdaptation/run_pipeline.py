@@ -21,7 +21,7 @@ def main():
     ap.add_argument("--seeds", nargs="*", type=int, default=[0, 10, 20, 40])
     ap.add_argument("--context_field", default="context")
     ap.add_argument("--recompute", nargs="+", default=["attention", "context_cite","at2"])
-    ap.add_argument("--skip_recompute", type=int, default=1)
+    ap.add_argument("--skip_recompute",nargs="*", type=int, default=[5])
     ap.add_argument("--skip_examples", nargs="*", type=int, default=[])
     args = ap.parse_args()
 

@@ -25,7 +25,7 @@ def run_full_pipeline(*,model_id: str,
     dump_policy: str = "flip",
     dump_window: int = 1,
     recompute: Optional[List[str]] = None,
-    skip_recompute: int= 1):
+    skip_recompute: List[int]= None):
 
     model_config = Model_Config.ModelConfig(model_id)
     os.makedirs(out_dir, exist_ok=True)
@@ -108,40 +108,41 @@ def run_full_pipeline(*,model_id: str,
         else:
             raise ValueError(f"Unknown method: {method_name}")
 
-    for rec_method in recompute:
-        try:
-            result_name, payload = run_recompute_method(
-                model_con=model_config,
-                out_dir=out_dir,
-                rec_method=rec_method,
-                model_id=model_id,
-                full_context=full_context,
-                query=query,
-                p_true_flipping=detect_flip_to_true,)
-            results["methods"][result_name] = payload
-        except Exception as e:
-            if rec_method == "at2":
-                results["methods"]["recompute_at2"] = {"error": str(e), "status": "failed"}
-            else:
-                raise
-
-
-    if skip_recompute!=1:
+    if skip_recompute is not None and 1 in skip_recompute:
         for rec_method in recompute:
             try:
                 result_name, payload = run_recompute_method(
                     model_con=model_config,
-                    out_dir=out_dir,rec_method=rec_method,model_id=model_id,
-                    full_context=full_context,query=query,
-                    p_true_flipping=detect_flip_to_true,
-                    skip_recompute=skip_recompute,
-                )
-                results["methods"][f"{result_name}_SR{skip_recompute}"] = payload
+                    out_dir=out_dir,
+                    rec_method=rec_method,
+                    model_id=model_id,
+                    full_context=full_context,
+                    query=query,
+                    p_true_flipping=detect_flip_to_true,)
+                results["methods"][result_name] = payload
             except Exception as e:
                 if rec_method == "at2":
                     results["methods"]["recompute_at2"] = {"error": str(e), "status": "failed"}
                 else:
                     raise
+
+    elif skip_recompute is not None:
+        for val in skip_recompute:
+            for rec_method in recompute:
+                try:
+                    result_name, payload = run_recompute_method(
+                        model_con=model_config,
+                        out_dir=out_dir,rec_method=rec_method,model_id=model_id,
+                        full_context=full_context,query=query,
+                        p_true_flipping=detect_flip_to_true,
+                        skip_recompute=val,
+                    )
+                    results["methods"][f"{result_name}_SR{val}"] = payload
+                except Exception as e:
+                    if rec_method == "at2":
+                        results["methods"]["recompute_at2"] = {"error": str(e), "status": "failed"}
+                    else:
+                        raise
 
     from datetime import datetime
 
