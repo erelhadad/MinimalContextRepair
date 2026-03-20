@@ -322,8 +322,12 @@ def _write_adaptive_log(
 
 
 def mask_by_order_recompute(
-    *,full_context: str,query: str,
-    hf_model,hf_tok, hf_device,
+    *,
+    full_context: str,
+    query: str,
+    hf_model,
+    hf_tok,
+    hf_device,
     max_steps: Optional[int] = 2000,
     batch_size: int = 2,
     score_mode: str = "attention",
@@ -332,8 +336,10 @@ def mask_by_order_recompute(
     score_estimator_path=None,
     generate_kwargs=None,
     p_true_flipping: bool = False,
-    true_variants=None,false_variants=None,
+    true_variants=None,
+    false_variants=None,
     masking_iteration=1,
+    stop_scores_abs: Optional[float] = None,
 ):
     """
     Adaptive greedy masking:
@@ -358,6 +364,8 @@ def mask_by_order_recompute(
         max_steps = n
     max_steps = int(min(max_steps, n))
 
+    masking_iteration = max(1, int(masking_iteration))
+
     masked_flags = np.zeros(n, dtype=bool)
     masked_spans: List[Tuple[int, int]] = []
 
@@ -367,7 +375,9 @@ def mask_by_order_recompute(
     masked_prompts: List[str] = []
     masked_context_list: List[str] = []
 
-    while len(order)< max_steps:
+    keep_running = True
+
+    while len(order) < max_steps and keep_running:
         cur_context = mask_context_spans_same_length(full_context, masked_spans)
 
         if score_mode == "attention":
@@ -389,7 +399,6 @@ def mask_by_order_recompute(
                 base_offsets=base_offsets,
             )
         elif score_mode == "at2":
-
             scores_base = _at2_scores_mapped_to_base(
                 hf_model=hf_model,
                 hf_tok=hf_tok,
@@ -402,25 +411,38 @@ def mask_by_order_recompute(
                     "do_sample": False,
                 },
             )
-
-
         else:
             raise ValueError(
-                f"Unknown score_mode={score_mode}. Use 'attention', 'context_cite', or 'at2'.")
-
+                f"Unknown score_mode={score_mode}. Use 'attention', 'context_cite', or 'at2'."
+            )
 
         scores_base = scores_base.astype(np.float32, copy=False)
         scores_base[masked_flags] = -np.inf
 
-        top_idx=np.argpartition(scores_base, -masking_iteration)[-masking_iteration:]
+        remaining_budget = max_steps - len(order)
+        if remaining_budget <= 0:
+            break
+
+        top_k = min(masking_iteration, remaining_budget, n)
+        if top_k <= 0:
+            break
+
+        top_idx = np.argpartition(scores_base, -top_k)[-top_k:]
         top_idx = top_idx[np.argsort(scores_base[top_idx])[::-1]]
 
-
         for index in top_idx:
-            pick=int(index)
+            pick = int(index)
             pick_score = float(scores_base[pick])
 
             if not np.isfinite(pick_score):
+                keep_running = False
+                break
+
+            if stop_scores_abs is not None and pick_score <= stop_scores_abs:
+                keep_running = False
+                break
+
+            if masked_flags[pick]:
                 continue
 
             masked_flags[pick] = True
@@ -432,36 +454,46 @@ def mask_by_order_recompute(
             masked_context_list.append(new_context)
 
             if score_mode in ("context_cite", "at2"):
-                masked_prompts.append(prompt_template.format(context=new_context, query=query))
+                masked_prompts.append(
+                    prompt_template.format(context=new_context, query=query)
+                )
             else:
-                masked_prompts.append(prompt_template.format(context=new_context, question=query))
+                masked_prompts.append(
+                    prompt_template.format(context=new_context, question=query)
+                )
 
-
-        if len(order) == 1 or len(order) % 25 == 0:
+        if len(order) > 0 and (len(order) == 1 or len(order) % 25 == 0):
             print(
                 f"[adaptive] masked={len(order)}/{max_steps} "
                 f"last_pick={order[-1]} last_score={scores_at_pick[-1]:.6f}"
             )
 
-
     os.makedirs(os.path.dirname(compute_probs_file_name) or ".", exist_ok=True)
 
-    masked_stats, masked_logps = compute_probs(
-        hf_model,hf_tok,
-        masked_prompts,hf_device,
-        None,
-        batch_size=batch_size,
-        detect_flip_to_true=p_true_flipping,
-        true_variants=true_variants,
-        false_variants=false_variants,
-        masked_context_list=masked_context_list,
-        return_full_logp=True,file_name=compute_probs_file_name,
-    )
+    if masked_prompts:
+        masked_stats, masked_logps = compute_probs(
+            hf_model,
+            hf_tok,
+            masked_prompts,
+            hf_device,
+            None,
+            batch_size=batch_size,
+            detect_flip_to_true=p_true_flipping,
+            true_variants=true_variants,
+            false_variants=false_variants,
+            masked_context_list=masked_context_list,
+            return_full_logp=True,
+            file_name=compute_probs_file_name,
+        )
+    else:
+        masked_stats, masked_logps = [], []
 
     if log_path is not None:
         os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
-        _write_adaptive_log(log_path,
-            title=f"Adaptive greedy masking (recompute each {masking_iteration} step/s)",query=query,
+        _write_adaptive_log(
+            log_path,
+            title=f"Adaptive greedy masking (recompute each {masking_iteration} step/s)",
+            query=query,
             full_context=full_context,
             base_offsets=base_offsets,
             order=order,
@@ -471,7 +503,6 @@ def mask_by_order_recompute(
         print(f"[adaptive] wrote log to {log_path}")
 
     return masked_stats, masked_logps, order, scores_at_pick
-
 
 
 

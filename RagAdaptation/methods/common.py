@@ -223,7 +223,7 @@ def mask_by_order(
     source_offsets: Optional[List[Tuple[int, int]]] = None,
     force_class_prompt: Optional[bool] = None,
     baseline_stats: Optional[Dict[str, Any]] = None,
-    stop_scores_relative: Optional[Sequence[float]] = None,
+    stop_scores_relative: Optional[float] = 0,
 ):
     hf_model, hf_tok, hf_device = model_con.load()
     true_variants = model_con.get_true_variants()
@@ -295,12 +295,14 @@ def mask_by_order(
         order = rng.permutation(len(ctx_rel_offsets))
         scores_vec = None
 
-    ordered_offsets = [ctx_rel_offsets[i] for i in order]
-    max_val=np.max(scores_vec)
-    if stop_scores_relative:
-        threshold=max_val*stop_scores_relative
-        scores_vec =[i for i in stop_scores_relative if i>=threshold ]
 
+    max_val = np.max(scores_vec)
+
+    if stop_scores_relative is not None:
+        threshold = max_val * stop_scores_relative
+        order = [i for i in order if scores_vec[i] >= threshold]
+
+    ordered_offsets = [ctx_rel_offsets[i] for i in order]
 
 
     masked_prompts, masked_context_list = create_masked_prompts_iterative(
