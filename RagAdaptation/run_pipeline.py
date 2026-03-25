@@ -10,7 +10,7 @@ from RagAdaptation.pipeline.runner import run_dataset
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--input", required=True, help="report.json or examples.json")
+    ap.add_argument("--input", required=True, help="report.json that contains field of relevant example")
     ap.add_argument("--out_dir", default=str(RUNS_DIR))
     ap.add_argument(
         "--models",
@@ -23,6 +23,8 @@ def main():
     ap.add_argument("--recompute", nargs="+", default=["attention", "context_cite","at2"])
     ap.add_argument("--skip_recompute",nargs="*", type=int, default=[5])
     ap.add_argument("--skip_examples", nargs="*", type=int, default=[])
+    ap.add_argument("--save_logs",  action="store_true")
+    ap.add_argument("--stop_at_flip", action="store_true")
     args = ap.parse_args()
 
     config = PipelineConfig(
@@ -34,7 +36,9 @@ def main():
         recompute=list(args.recompute),
         context_field=args.context_field,
         skip_example_indices=list(args.skip_examples),
-        skip_recompute=args.skip_recompute
+        skip_recompute=args.skip_recompute,
+        save_logs=args.save_logs,
+        stop_at_flip=args.stop_at_flip,
     )
 
     run_root = run_dataset(config)

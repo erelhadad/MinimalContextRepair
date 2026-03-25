@@ -7,6 +7,28 @@ _HF_SCORER_CACHE: dict[str, tuple[Any, Any, Any]] = {}
 _HF_SINGLE_DEVICE_CACHE: dict[tuple[str, str], tuple[Any, Any, Any]] = {}
 
 
+
+import gc
+import torch
+
+def unload_hf_model(model_id: str, device: str | None = None):
+    global _HF_SCORER_CACHE, _HF_SINGLE_DEVICE_CACHE
+
+    cached = _HF_SCORER_CACHE.pop(model_id, None)
+    if cached is not None:
+        model, tok, dev = cached
+        del model, tok, dev
+
+    if device is not None:
+        cached2 = _HF_SINGLE_DEVICE_CACHE.pop((model_id, str(device)), None)
+        if cached2 is not None:
+            model, tok, dev = cached2
+            del model, tok, dev
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
 def _require_transformers():
     try:
         from transformers import AutoModelForCausalLM, AutoTokenizer

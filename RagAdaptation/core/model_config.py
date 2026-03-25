@@ -164,6 +164,7 @@ class ModelConfig:
 
         return user_msg
 
+
     # -------- scoring helpers --------
     def get_true_variants(self) -> List[str]:
         return list(self.true_variants)
@@ -193,3 +194,14 @@ class ModelConfig:
             "false_variants": self.false_variants,
             "device": self.device,
         }
+    # --------- unloading
+    def unload(self):
+        from RagAdaptation.core.models import unload_hf_model
+
+        device_str = None if self.hf_device is None else str(self.hf_device)
+
+        self.hf_model = None
+        self.tok_hf = None
+        self.hf_device = None
+
+        unload_hf_model(self.model_id, device=device_str)

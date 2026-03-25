@@ -14,7 +14,8 @@ from RagAdaptation.methods.common import mask_by_order
 from RagAdaptation.prompts_format import TF_RAG_TEMPLATE_A2T
 from RagAdaptation.core.model_config import ModelConfig
 
-def run_context_cite_method(*,model_con:ModelConfig, out_dir: str, baseline_stats, full_context: str, query: str, p_true_flipping: bool, dump_policy: str, dump_window: int):
+def run_context_cite_method(*,model_con:ModelConfig, out_dir: str, baseline_stats, full_context: str, query: str, p_true_flipping: bool, dump_policy: str, dump_window: int,
+                         save_logs:bool=True, stop_on_flip:bool=False   ):
     if ContextCiter is None:
         raise ModuleNotFoundError("context_cite is required for the context_cite method.")
 
@@ -47,6 +48,7 @@ def run_context_cite_method(*,model_con:ModelConfig, out_dir: str, baseline_stat
         dump_window=dump_window,
         source_offsets=contextcite_offsets,
         baseline_stats=baseline_stats,
+        save_logs=save_logs, stop_on_flip=stop_on_flip,
     )
     create_p_true_function(masked_logps, out_dir=str(plots_dir(out_dir)), filename="context_cite_p_true.png")
     return {"masked_stats": masked_stats, "masked_logps": masked_logps}

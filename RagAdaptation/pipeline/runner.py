@@ -38,6 +38,8 @@ def build_manifest(config: PipelineConfig, items_count: int) -> dict[str, Any]:
         "items_count": int(items_count),
         "context_field": config.context_field,
         "skip_example_indices": list(config.skip_example_indices),
+        "save_logs":config.save_logs,
+        "stop_at_flip":config.stop_at_flip,
     }
 
 
@@ -74,13 +76,12 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
 
 
         for model_id in config.models:
-            if not ex["per_model"][model_id]["relevant"]:
-                print(f"Example {ex_i} has no relevant run for the model {model_id}")
+            model_info = ex.get("per_model", {}).get(model_id)
+            if not model_info or not model_info.get("relevant", False):
                 continue
 
             #meaning are we in the search for flipping from false to true
             detect_flip_to_true = ex["per_model"][model_id]["prob_label_with_context"] == "false"
-            print(f"p_true_fliiping is for model:{model_id} is: ", detect_flip_to_true,"\n")
 
             mdl_dir = model_dir(ex_dir, model_id)
             run_pipeline_fn(model_id=model_id,
@@ -93,7 +94,10 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
                 dump_policy="flip",
                 dump_window=1,
                 recompute=config.recompute,
-                skip_recompute=config.skip_recompute
+                skip_recompute=config.skip_recompute,
+                save_logs= config.save_logs,
+                stop_on_flip= config.stop_at_flip,
             )
+            print(f"[run] ex={ex_i} model={model_id} flip_to_true={detect_flip_to_true}")
 
     return run_root

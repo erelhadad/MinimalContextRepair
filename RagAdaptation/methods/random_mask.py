@@ -7,7 +7,7 @@ from RagAdaptation.core.plotting import create_p_true_function
 from RagAdaptation.methods.common import mask_by_order
 from RagAdaptation.core.model_config import ModelConfig
 
-def run_random_method(*,model_con:ModelConfig, out_dir: str, baseline_stats, full_context: str, query: str, hf_model, hf_tok, hf_device, seeds: list[int], p_true_flipping: bool, dump_policy: str, dump_window: int, true_variants, false_variants, k: int = 1):
+def run_random_method(*,model_con:ModelConfig, out_dir: str, baseline_stats, full_context: str, query: str, seeds: list[int], p_true_flipping: bool, dump_policy: str, dump_window: int, save_logs:bool=True, stop_on_flip:bool=False):
     results = {}
     for seed in seeds:
         rng = np.random.default_rng(seed)
@@ -24,7 +24,8 @@ def run_random_method(*,model_con:ModelConfig, out_dir: str, baseline_stats, ful
             dump_policy=dump_policy,
             dump_window=dump_window,
             baseline_stats=baseline_stats,
+            save_logs=save_logs,
+            stop_on_flip=stop_on_flip,
         )
         results[str(seed)] = {"masked_stats": masked_stats, "masked_logps": masked_logps}
-        create_p_true_function(masked_logps, out_dir=str(plots_dir(out_dir)), filename=f"random_seed_{seed}_p_true.png")
     return results

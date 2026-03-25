@@ -340,6 +340,9 @@ def mask_by_order_recompute(
     false_variants=None,
     masking_iteration=1,
     stop_scores_abs: Optional[float] = None,
+    save_logs:bool=True,
+    stop_on_flip:bool=False
+
 ):
     """
     Adaptive greedy masking:
@@ -484,11 +487,13 @@ def mask_by_order_recompute(
             masked_context_list=masked_context_list,
             return_full_logp=True,
             file_name=compute_probs_file_name,
+            save_file=save_logs,
+            stop_on_flip=stop_on_flip
         )
     else:
         masked_stats, masked_logps = [], []
 
-    if log_path is not None:
+    if save_logs and log_path is not None:
         os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
         _write_adaptive_log(
             log_path,
@@ -500,7 +505,6 @@ def mask_by_order_recompute(
             scores_at_pick=scores_at_pick,
             masked_stats=masked_stats,
         )
-        print(f"[adaptive] wrote log to {log_path}")
 
     return masked_stats, masked_logps, order, scores_at_pick
 

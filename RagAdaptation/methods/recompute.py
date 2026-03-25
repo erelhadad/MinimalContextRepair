@@ -6,7 +6,8 @@ from RagAdaptation.methods.at2 import AT2_ESTIMATOR_BY_MODEL
 from RagAdaptation.core.model_config import ModelConfig
 
 
-def run_recompute_method(*,model_con:ModelConfig, out_dir: str, rec_method: str, model_id: str, full_context: str, query: str,p_true_flipping: bool,skip_recompute=1):
+def run_recompute_method(*,model_con:ModelConfig, out_dir: str, rec_method: str, model_id: str, full_context: str, query: str,p_true_flipping: bool,skip_recompute=1,
+                         save_logs:bool=True,stop_on_flip:bool=True,):
     from RagAdaptation.baseline.mask_iter_recompute_attention import mask_by_order_recompute
     from RagAdaptation.core.models import get_hf_scorer_single_device
 
@@ -26,9 +27,12 @@ def run_recompute_method(*,model_con:ModelConfig, out_dir: str, rec_method: str,
             p_true_flipping=p_true_flipping,
             true_variants=true_variants,
             false_variants=false_variants,
-            masking_iteration=skip_recompute
+            masking_iteration=skip_recompute,
+            save_logs=save_logs,
+            stop_on_flip=stop_on_flip,
         )
-        create_p_true_function(masked_logps, out_dir=str(plots_dir(out_dir)), filename=f"recompute_attention_p_true_{skip_recompute}.png")
+        if save_logs:
+            create_p_true_function(masked_logps, out_dir=str(plots_dir(out_dir)), filename=f"recompute_attention_p_true_{skip_recompute}.png")
         return method_name, {"masked_stats": masked_stats, "masked_logps": masked_logps, "order": order, "scores_at_pick": scores_at_pick}
 
     if rec_method == "context_cite":
@@ -47,8 +51,11 @@ def run_recompute_method(*,model_con:ModelConfig, out_dir: str, rec_method: str,
             true_variants=true_variants,
             false_variants=false_variants,
             masking_iteration=skip_recompute
+            , save_logs=save_logs,
+            stop_on_flip=stop_on_flip,
         )
-        create_p_true_function(masked_logps, out_dir=str(plots_dir(out_dir)), filename=f"recompute_context_cite_p_true_{skip_recompute}.png")
+        if save_logs:
+            create_p_true_function(masked_logps, out_dir=str(plots_dir(out_dir)), filename=f"recompute_context_cite_p_true_{skip_recompute}.png")
         return method_name, {"masked_stats": masked_stats, "masked_logps": masked_logps, "order": order, "scores_at_pick": scores_at_pick}
 
     if rec_method == "at2":
@@ -72,9 +79,12 @@ def run_recompute_method(*,model_con:ModelConfig, out_dir: str, rec_method: str,
             p_true_flipping=p_true_flipping,
             true_variants=true_variants,
             false_variants=false_variants,
-            masking_iteration=skip_recompute
+            masking_iteration=skip_recompute,
+            save_logs=save_logs,
+            stop_on_flip=stop_on_flip,
         )
-        create_p_true_function(masked_logps, out_dir=str(plots_dir(out_dir)), filename=f"recompute_at2_p_true_{skip_recompute}.png")
+        if save_logs:
+            create_p_true_function(masked_logps, out_dir=str(plots_dir(out_dir)), filename=f"recompute_at2_p_true_{skip_recompute}.png")
         return method_name, {"masked_stats": masked_stats, "masked_logps": masked_logps, "order": order, "scores_at_pick": scores_at_pick, "estimator": str(est_path)}
 
     raise ValueError(f"Unknown recompute method: {rec_method}")

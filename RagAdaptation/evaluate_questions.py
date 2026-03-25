@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from RagAdaptation.core.model_config import ModelConfig
 import argparse
 import json
 from pathlib import Path
@@ -82,16 +82,6 @@ def load_examples(path: str) -> List[Dict[str, Any]]:
 # -----------------------------
 # Model load (once per model)
 # -----------------------------
-def load_model_and_tok(model_id: str, device: str):
-    tok = AutoTokenizer.from_pretrained(model_id, use_fast=True)
-    if tok.pad_token is None:
-        tok.pad_token = tok.eos_token
-
-    dtype = torch.float16 if (device.startswith("cuda") and torch.cuda.is_available()) else torch.float32
-    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype)
-    model.to(device)
-    model.eval()
-    return model, tok
 
 
 @torch.no_grad()
@@ -138,10 +128,11 @@ def main():
     # Load each model once
     models: Dict[str, Tuple[Any, Any]] = {}
     for mid in args.models:
-        model, tok = load_model_and_tok(mid, args.device)
+        model_confid=ModelConfig(mid)
+        model, tok,dev = model_confid.load()
         models[mid] = (model, tok)
 
-    report: Dict[str, Any] = {"meta": {"device": args.device,"batch_size": args.batch_size,
+    report: Dict[str, Any] = {"meta": {"device": str(args.device),"batch_size": args.batch_size,
             "max_new_tokens": args.max_new_tokens,"models": args.models,"candidate_strings": {"true": " true", "false": " false"},},
         "results": [],}
 
@@ -154,20 +145,33 @@ def main():
             "expected_answer_norm": expected_norm,"contradicting_url": url,"prompt": "","per_model": {},}
         context_path = ex.get("context_path")
 
+        docs = load_documents_any(context_path)
+        full_context = combine_document_text(docs)
+
         for mid, (model, tok) in models.items():
-            prompt = build_chat_prompt(tok, q, context="")
+
+            prompt = ModelConfig(mid).format_prompt(
+                question=q,
+                context="",
+                context_cite_at2_formating=False,
+            )
+
             gen_text = generate_answer(model, tok, prompt, max_new_tokens=args.max_new_tokens)
             try:
                 gen_norm = normalize_true_false(gen_text)
             except Exception:
                 gen_norm = None
-
+            true_variants= ModelConfig(mid).get_true_variants()
+            false_variants = ModelConfig(mid).get_false_variants()
             # 2) compute_probs (expects list of prompts)
             stats_list, full_logps_without_context = compute_probs(model=model, tok=tok, prompts=[prompt], device=model.device,
                                                                    expected_result=None, batch_size=1,
-                                                                   masked_context_list=None, return_full_logp=True,
+                                                                   masked_context_list=None,
+                                                                   true_variants=true_variants,
+                                                                   false_variants=false_variants,
+                                                                   return_full_logp=False,
                                                                    file_name=f"compute_probs_baseline_without_context_{mid.replace('/', '__')}_idx{i}.txt",
-                                                                   detect_flip_to_true=(expected_norm == "false"), )
+                                                                   detect_flip_to_true=(expected_norm == "false"),save_file=False,stop_on_flip=True )
             tf_stats = stats_list[0]
             # tf_stats keys: logP_true, logP_false, log_odds, p_true :contentReference[oaicite:3]{index=3}
 
@@ -178,17 +182,19 @@ def main():
 
 
             #Evaluate question with full context
-
-            docs = load_documents_any(context_path)
-            full_context = combine_document_text(docs)
-            prompt_template = ChatPromptTemplate.from_template(TF_RAG_TEMPLATE)
-            baseline_prompt = prompt_template.format(context=full_context, question=q)
-
+            prompt_template = ModelConfig(mid).get_prompt_template(False)
+            baseline_prompt = ModelConfig(mid).format_prompt(
+                question=q,
+                context=full_context,
+                context_cite_at2_formating=False,
+            )
             baseline_stats_list, full_logps_with_context = compute_probs(model=model, tok=tok, prompts=[baseline_prompt], device=model.device,
                                                                          expected_result=None, batch_size=1,
-                                                                         masked_context_list=None, return_full_logp=True,
+                                                                         masked_context_list=None, return_full_logp=False,
+                                                                         true_variants=true_variants,
+                                                                         false_variants=false_variants,
                                                                          file_name=f"compute_probs_baseline_with_context_{mid.replace('/', '__')}_idx{i}.txt",
-                                                                         detect_flip_to_true=(expected_norm == "false"), )
+                                                                         detect_flip_to_true=(expected_norm == "false"),save_file=False,stop_on_flip=True )
 
             baseline_stats = baseline_stats_list[0]
             prob_label_with_context = "true" if baseline_stats["logP_true"] > baseline_stats["logP_false"] else "false"

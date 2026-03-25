@@ -16,6 +16,7 @@ import RagAdaptation.core.model_config as Model_Config
 from RagAdaptation.prompts_format import TF_RAG_TEMPLATE
 
 
+
 def run_full_pipeline(*,model_id: str,
     query: str,full_context: str,
     methods: List[str],
@@ -25,7 +26,10 @@ def run_full_pipeline(*,model_id: str,
     dump_policy: str = "flip",
     dump_window: int = 1,
     recompute: Optional[List[str]] = None,
-    skip_recompute: List[int]= None):
+    skip_recompute: List[int]= None,
+    save_logs: bool= True,
+    stop_on_flip: bool= False,
+                      ):
 
     model_config = Model_Config.ModelConfig(model_id)
     os.makedirs(out_dir, exist_ok=True)
@@ -51,6 +55,8 @@ def run_full_pipeline(*,model_id: str,
         detect_flip_to_true=detect_flip_to_true,
         true_variants=true_variants,
         false_variants=false_variants,
+        save_file=save_logs,
+        stop_on_flip=stop_on_flip,
     )
     baseline_stats = baseline_stats_list[0]
 
@@ -73,7 +79,9 @@ def run_full_pipeline(*,model_id: str,
                 baseline_prompt=baseline_prompt,baseline_stats=baseline_stats,
                 full_context=full_context,query=query,
                 p_true_flipping=detect_flip_to_true,
-                dump_policy=dump_policy,dump_window=dump_window,)
+                dump_policy=dump_policy,dump_window=dump_window,save_logs=save_logs,
+                stop_on_flip=stop_on_flip,
+    )
 
         elif method_name == "random":
             results["methods"]["random"] = run_random_method(
@@ -82,7 +90,10 @@ def run_full_pipeline(*,model_id: str,
                 full_context=full_context,
                 query=query,seeds=seeds,
                 p_true_flipping=detect_flip_to_true,
-                dump_policy=dump_policy,dump_window=dump_window,)
+                dump_policy=dump_policy,dump_window=dump_window,
+                save_logs=save_logs,
+                stop_on_flip=stop_on_flip,
+            )
 
         elif method_name == "context_cite":
             results["methods"]["context_cite"] = run_context_cite_method(
@@ -92,6 +103,8 @@ def run_full_pipeline(*,model_id: str,
                 full_context=full_context,
                 query=query,p_true_flipping=detect_flip_to_true,
                 dump_policy=dump_policy,dump_window=dump_window,
+                save_logs=save_logs,
+                stop_on_flip=stop_on_flip,
             )
         elif method_name == "at2":
             results["methods"]["at2"] = run_at2_method(
@@ -103,8 +116,9 @@ def run_full_pipeline(*,model_id: str,
                 query=query,
                 p_true_flipping=detect_flip_to_true,
                 dump_policy=dump_policy,
-                dump_window=dump_window,
-            )
+                dump_window=dump_window,save_logs=save_logs,
+                stop_on_flip=stop_on_flip,
+    )
         else:
             raise ValueError(f"Unknown method: {method_name}")
 
@@ -118,7 +132,9 @@ def run_full_pipeline(*,model_id: str,
                     model_id=model_id,
                     full_context=full_context,
                     query=query,
-                    p_true_flipping=detect_flip_to_true,)
+                    p_true_flipping=detect_flip_to_true,save_logs=save_logs,
+                    stop_on_flip=stop_on_flip,
+                )
                 results["methods"][result_name] = payload
             except Exception as e:
                 if rec_method == "at2":
@@ -136,6 +152,9 @@ def run_full_pipeline(*,model_id: str,
                         full_context=full_context,query=query,
                         p_true_flipping=detect_flip_to_true,
                         skip_recompute=val,
+                        save_logs=save_logs,
+                        stop_on_flip=stop_on_flip,
+
                     )
                     results["methods"][f"{result_name}_SR{val}"] = payload
                 except Exception as e:
@@ -147,14 +166,16 @@ def run_full_pipeline(*,model_id: str,
     from datetime import datetime
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
     method_tag = "_".join(methods) if methods else "none"
     rec_tag = "_".join(recompute) if recompute else "none"
 
-    out_path = os.path.join(out_dir, f"summary_methods_{method_tag}_recompute_{rec_tag}_{stamp}.json")
+    out_path = os.path.join(
+        out_dir,
+        f"pipeline_result_methods_{method_tag}_recompute_{rec_tag}_{stamp}.json"
+    )
+    print(f"[done] saved {out_path}")
     write_json(out_path, results)
-
-    compat_path = os.path.join(out_dir, f"pipeline_result_methods_{method_tag}_recompute_{rec_tag}_{stamp}.json")
-    write_json(compat_path, results)
-
     return out_path
+
+
+

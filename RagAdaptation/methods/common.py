@@ -224,6 +224,8 @@ def mask_by_order(
     force_class_prompt: Optional[bool] = None,
     baseline_stats: Optional[Dict[str, Any]] = None,
     stop_scores_relative: Optional[float] = 0,
+    save_logs:bool=True,
+    stop_on_flip:bool =False,
 ):
     hf_model, hf_tok, hf_device = model_con.load()
     true_variants = model_con.get_true_variants()
@@ -267,7 +269,8 @@ def mask_by_order(
             last = scores[-1]
             last_avg = last[0].mean(dim=0)
             sub = last_avg[np.ix_(q_token_indices, ctx_token_indices)]
-            scores_vec = sub.mean(axis=0).detach().float().cpu().numpy()
+            #changed to sum
+            scores_vec = sub.sum(axis=0).detach().float().cpu().numpy()
             order = np.argsort(scores_vec)[::-1]
             change_template_contextCite = False
         else:
@@ -295,10 +298,12 @@ def mask_by_order(
         order = rng.permutation(len(ctx_rel_offsets))
         scores_vec = None
 
+    if scores_vec is not None:
+        max_val = float(np.max(scores_vec))
+    else:
+        max_val = None
 
-    max_val = np.max(scores_vec)
-
-    if stop_scores_relative is not None:
+    if max_val is not None and stop_scores_relative is not None:
         threshold = max_val * stop_scores_relative
         order = [i for i in order if scores_vec[i] >= threshold]
 
@@ -324,9 +329,11 @@ def mask_by_order(
         detect_flip_to_true=p_true_flipping,
         true_variants=true_variants,
         false_variants=false_variants,
+        save_file=save_logs,
+        stop_on_flip=stop_on_flip,
     )
 
-    if dump_json_path:
+    if dump_json_path and save_logs:
         pick_scores = None if scores_vec is None else [float(scores_vec[i]) for i in order]
         if baseline_stats is None:
             baseline_stats = compute_probs(

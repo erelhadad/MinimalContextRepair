@@ -147,6 +147,8 @@ def compute_probs(
     true_variants: Optional[List[str]] = None,
     false_variants: Optional[List[str]] = None,
     reduction: str = "logsumexp",  # "logsumexp" or "max"
+    save_file : bool = True,
+    stop_on_flip  : bool = False,
 ):
     """
     General class scorer for binary true/false answers.
@@ -192,17 +194,21 @@ def compute_probs(
     results: List[Dict[str, Any]] = []
     p_true_values: List[float] = []
     first_flip_index: Optional[int] = None
+    log_f = None
 
-    p = Path(file_name)
-    p.parent.mkdir(parents=True, exist_ok=True)
+    if save_file:
+        p = Path(file_name)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        log_f = p.open("w", encoding="utf-8")
 
     # Keep row_batch_size conservative so memory stays close to the old code.
     # Old code processed about `batch_size` full prompts at once; here each prompt
     # expands into several variants, so we micro-batch the expanded rows.
     row_batch_size = max(1, int(batch_size))
+    flag_flip_stop=False
 
-    with p.open("w", encoding="utf-8") as f:
-        for i in range(0, len(prompts), batch_size):
+    for i in range(0, len(prompts), batch_size):
             chunk = prompts[i : i + batch_size]
 
             prompt_id_lists = [
@@ -250,7 +256,8 @@ def compute_probs(
                     "false_variants_used": [s for s, _ in false_cands],
                     "best_true_variant": true_cands[int(best_true_idx[j].item())][0],
                     "best_false_variant": false_cands[int(best_false_idx[j].item())][0],
-                }
+                    "step_index": i + j+1,
+                    }
 
                 # Same flip semantics as your current pipeline:
                 # - detect_flip_to_true=True  => looking for false -> true
@@ -261,24 +268,40 @@ def compute_probs(
                     ((detect_flip_to_true is True) and (log_false_val < log_true_val))
                 )
 
+                res["is_flipped"]=flip_cond
                 if flip_cond and first_flip_index is None:
                     first_flip_index = i + j
-                    f.write(
-                        f"[{i + j}] logP_true={log_true_val:.4f} "
-                        f"logP_false={log_false_val:.4f} "
-                        f"log_odds={log_odds:.4f} "
-                        f"p_true={p_true_out_of_true_and_false:.6f}\n\n"
-                    )
-                    f.write(f"After {i + j} iterations we had converted\n")
-                    f.write(f"The prompt:\n{prompts[i + j]}\n")
+                    if stop_on_flip:
+                        flag_flip_stop=True
+
+                    res["first_flip_index"] = first_flip_index  + 1
+
+                    # even if we dont save for the file we still return the results
+                    if save_file and log_f is not None:
+                        log_f.write(
+                            f"[{i + j}] logP_true={log_true_val:.4f} "
+                            f"logP_false={log_false_val:.4f} "
+                            f"log_odds={log_odds:.4f} "
+                            f"p_true={p_true_out_of_true_and_false:.6f}\n\n"
+                        )
+                        log_f.write(f"After {i + j} iterations we had converted\n")
+                        log_f.write(f"The prompt:\n{prompts[i + j]}\n")
 
                 if return_full_logp:
                     p_true_values.append(float(p_true_out_of_true_and_false))
 
                 results.append(res)
+                #we already found a flip then stop the full iteration
+                if flag_flip_stop:
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                    if log_f is not None:
+                        log_f.close()
+                    return results, (p_true_values if return_full_logp else None)
 
-    if len(results) > 0:
-        results[0]["first_flip_index"] = first_flip_index
+    if log_f is not None:
+        log_f.close()
+
 
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
