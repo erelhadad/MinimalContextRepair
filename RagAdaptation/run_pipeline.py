@@ -6,6 +6,7 @@ from pathlib import Path
 from RagAdaptation.core.paths import RUNS_DIR
 from RagAdaptation.pipeline.config import PipelineConfig
 from RagAdaptation.pipeline.runner import run_dataset
+from typing import Tuple
 
 
 def main():
@@ -26,6 +27,7 @@ def main():
     ap.add_argument("--skip_examples", nargs="*", type=int, default=[])
     ap.add_argument("--save_logs",  action="store_true")
     ap.add_argument("--stop_at_flip", action="store_true")
+    ap.add_argument("--examples_range", type=Tuple[int, int],help="Range of examples to run")
     args = ap.parse_args()
 
     config = PipelineConfig(
@@ -40,6 +42,7 @@ def main():
         skip_recompute=args.skip_recompute,
         save_logs=args.save_logs,
         stop_at_flip=args.stop_at_flip,
+        examples_range=examples_range,
     )
 
     run_root = run_dataset(config)

@@ -40,6 +40,7 @@ def build_manifest(config: PipelineConfig, items_count: int) -> dict[str, Any]:
         "skip_example_indices": list(config.skip_example_indices),
         "save_logs":config.save_logs,
         "stop_at_flip":config.stop_at_flip,
+        "examples_range":config.examples_range,
     }
 
 
@@ -54,6 +55,9 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
     for ex_i, ex in enumerate(items):
         if ex_i in set(config.skip_example_indices):
             continue
+        if config.examples_range is not None:
+            if ex_i <= config.examples_range[0] or ex_i >= config.examples_range[1]:
+                continue
 
         query = ex.get("query") or ex.get("question")
         if query is None:
