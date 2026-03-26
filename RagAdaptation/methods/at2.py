@@ -20,6 +20,10 @@ AT2_ESTIMATOR_BY_MODEL = {
     "microsoft/Phi-3-mini-4k-instruct": Path(
         "/data/home/erel.hadad/RAG_EXP/outputs/microsoft_Phi-3-mini-4k-instruct_databricks_databricks-dolly-15k_n1000_seed42_srcToken/estimators/default/score_estimator.pt"
     ),
+    "Qwen/Qwen3-4B-Instruct-2507":
+    Path(
+        "/data/home/erel.hadad/RAG_EXP/outputs/microsoft_Phi-3-mini-4k-instruct_databricks_databricks-dolly-15k_n1000_seed42_srcToken/estimators/default/score_estimator.pt"
+    ),
 }
 
 

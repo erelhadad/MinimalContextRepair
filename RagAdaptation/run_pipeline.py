@@ -15,7 +15,8 @@ def main():
     ap.add_argument(
         "--models",
         nargs="+",
-        default=["microsoft/Phi-3-mini-4k-instruct", "mistralai/Mistral-7B-Instruct-v0.3"],
+        default=["microsoft/Phi-3-mini-4k-instruct", "mistralai/Mistral-7B-Instruct-v0.3",
+                 "Qwen/Qwen3-4B-Instruct-2507"],
     )
     ap.add_argument("--methods", nargs="+", default=["attention", "random", "context_cite","at2"])
     ap.add_argument("--seeds", nargs="*", type=int, default=[0, 10, 20, 40])
