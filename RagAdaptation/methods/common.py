@@ -100,29 +100,95 @@ def create_masked_prompts_iterative(
     return batch, masked_context_list
 
 
-def get_attention_scores(hf_model, hf_tok, hf_device, full_prompt: str):
+def get_attention_scores(
+    hf_model,
+    hf_tok,
+    hf_device,
+    *,
+    full_prompt: str,
+    full_context: str,
+    query: str,
+):
+    """
+    Compute regular attention-based token scores for the context tokens only.
+
+    Scoring rule:
+      - take last attention layer
+      - average across heads
+      - take question -> context block
+      - sum over question tokens
+
+    Returns
+    -------
+    np.ndarray of shape [num_context_tokens]
+        Scores on CPU.
+    """
+    # 1) tokenize with offsets so we can locate context/query spans inside the full prompt
+    enc_full = hf_tok(
+        full_prompt,
+        add_special_tokens=False,
+        return_offsets_mapping=True,
+        truncation=False,
+        padding=False,
+    )
+
+    offsets_full = enc_full["offset_mapping"]
+    if hasattr(offsets_full, "tolist"):
+        offsets_full = offsets_full.tolist()
+
+    ctx_token_indices, _ctx_rel_offsets, after_ctx = find_token_indices_by_substring(
+        full_prompt,
+        full_context,
+        offsets_full,
+        start_search_at=0,
+    )
+
+    q_token_indices, _, _ = find_token_indices_by_substring(
+        full_prompt,
+        query,
+        offsets_full,
+        start_search_at=after_ctx,
+    )
+
+    # 2) tokenize again for the actual model forward
     enc = hf_tok(
         full_prompt,
         add_special_tokens=False,
         return_tensors="pt",
-        padding=True,
         truncation=False,
+        padding=False,
     )
     enc = {k: v.to(hf_device) for k, v in enc.items()}
 
+    # 3) forward with attentions
     with torch.no_grad():
         out = hf_model(
             **enc,
             output_attentions=True,
             return_dict=True,
+            use_cache=False,
         )
 
-    attention_scores = out.attentions
-    if attention_scores is None:
-        raise ValueError(f"Model  did not return attentions.")
+    attn_layers = out.attentions
+    if attn_layers is None:
+        raise ValueError("Model did not return attentions.")
 
-    return attention_scores
+    # 4) reduce to the small score vector we actually need
+    last = attn_layers[-1][0]          # [heads, seq, seq]
+    attn_avg = last.mean(dim=0)        # [seq, seq]
 
+    q_idx = torch.tensor(q_token_indices, device=attn_avg.device, dtype=torch.long)
+    c_idx = torch.tensor(ctx_token_indices, device=attn_avg.device, dtype=torch.long)
+
+    q_to_c = attn_avg.index_select(0, q_idx).index_select(1, c_idx)   # [|Q|, |C|]
+    scores_vec = q_to_c.sum(dim=0).detach().float().cpu().numpy().astype(np.float32, copy=False)
+
+    # 5) cleanup GPU memory
+    del out, attn_layers, last, attn_avg, q_idx, c_idx, q_to_c, enc
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    return scores_vec
 
 def _label_from_stats(st: Dict[str, Any]) -> str:
     return "true" if float(st["p_true"]) > 0.5 else "false"

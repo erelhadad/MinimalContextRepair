@@ -27,7 +27,7 @@ def main():
     ap.add_argument("--skip_examples", nargs="*", type=int, default=[])
     ap.add_argument("--save_logs",  action="store_true")
     ap.add_argument("--stop_at_flip", action="store_true")
-    ap.add_argument("--examples_range", type=Tuple[int, int],help="Range of examples to run")
+    ap.add_argument("--examples_range", nargs=2, type=int,help="Range of examples to run")
     args = ap.parse_args()
 
     config = PipelineConfig(
@@ -42,7 +42,7 @@ def main():
         skip_recompute=args.skip_recompute,
         save_logs=args.save_logs,
         stop_at_flip=args.stop_at_flip,
-        examples_range=examples_range,
+        examples_range=args.examples_range,
     )
 
     run_root = run_dataset(config)

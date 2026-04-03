@@ -1,10 +1,35 @@
 import re
 
+
 def normalize_true_false(text: str) -> str:
-    m = re.search(r"\b(true|false)\b", text.strip().lower())
+    s = text.strip()
+
+    # מפרידה camelCase: trueHuman -> true Human
+    s = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', s)
+
+    # מאחדת גרש רגיל וגרש טיפוגרפי
+    s = s.replace("’", "'")
+
+    # מסירה prefixes נפוצים בתחילת הטקסט
+    s = re.sub(r'^\s*(answer|response|output)\s*:\s*', '', s, flags=re.IGNORECASE)
+
+    # קודם כל בודקות שלילה מפורשת: is not / isn't
+    neg = re.search(r"\b(?:is\s+not|isn't)\s+(true|false|yes|no)\b", s, flags=re.IGNORECASE)
+    if neg:
+        val = neg.group(1).lower()
+        if val in {"true", "yes"}:
+            return "false"
+        return "true"
+
+    # אחר כך מחפשות true/false/yes/no בכל מקום במשפט
+    m = re.search(r"\b(true|false|yes|no)\b", s, flags=re.IGNORECASE)
     if not m:
-        raise ValueError(f"Model did not return true/false. Got: {text!r}")
-    return m.group(1)
+        raise ValueError(f"Model did not return true/false/yes/no. Got: {text!r}")
+
+    val = m.group(1).lower()
+    if val in {"true", "yes"}:
+        return "true"
+    return "false"
 
 
 # Minimal-pair prompts (same structure, only context differs)
@@ -15,16 +40,23 @@ question: {question}
 Answer:
 """
 
-TF_RAG_TEMPLATE = """Answer with exactly one word: true or false.
+TF_RAG_TEMPLATE = """Answer the question with exactly one word: true or false. 
 Use ONLY the context. 
-
 Context:
-{context}
+{context}.
 
 question: {question}
-Answer: 
+Answer:
 """
-TF_RAG_TEMPLATE_A2T = """Answer with exactly one word: true or false.
+
+TF_RAG_TEMPLATE_EMPTY = """Answer the question with exactly one word: true or false. 
+
+
+question: {question}
+Answer:
+"""
+
+TF_RAG_TEMPLATE_A2T = """Answer the question with exactly one word: true or false.
 Use ONLY the context. 
 
 Context:

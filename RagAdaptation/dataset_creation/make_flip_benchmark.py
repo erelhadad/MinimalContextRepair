@@ -9,9 +9,9 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
-
+from RagAdaptation.core.model_config import ModelConfig
 from datasets import load_dataset
-
+import numpy as np
 
 _THIS_FILE = Path(__file__).resolve()
 project_root = None
@@ -78,30 +78,72 @@ def _ensure_bool_answer(answer: Any) -> bool:
         return False
     raise ValueError(f"Unsupported binary answer value: {answer!r}")
 
+def _normalize_hotpot_context(context_field: Any) -> List[Tuple[str, List[str]]]:
+    # New HF-style format:
+    # {"title": [...], "sentences": [[...], [...], ...]}
+    if isinstance(context_field, dict):
+        titles = context_field.get("title", [])
+        sentences_lists = context_field.get("sentences", [])
+        return [
+            (str(title), sentences)
+            for title, sentences in zip(titles, sentences_lists)
+            if isinstance(sentences, list)
+        ]
+
+    # Older/expected format:
+    # [[title, [sent1, sent2, ...]], ...]
+    if isinstance(context_field, list):
+        out = []
+        for item in context_field:
+            if isinstance(item, (list, tuple)) and len(item) == 2:
+                title, sentences = item
+                if isinstance(sentences, list):
+                    out.append((str(title), sentences))
+        return out
+
+    raise ValueError(f"Hotpot context has unexpected type: {type(context_field)}")
+
+
+def _normalize_supporting_facts(supporting_facts: Any) -> set[tuple[str, int]]:
+    if not supporting_facts:
+        return set()
+
+    # New HF-style format:
+    # {"title": [...], "sent_id": [...]}
+    if isinstance(supporting_facts, dict):
+        titles = supporting_facts.get("title", [])
+        sent_ids = supporting_facts.get("sent_id", [])
+        return {
+            (str(title), int(sent_id))
+            for title, sent_id in zip(titles, sent_ids)
+        }
+
+    # Older/expected format:
+    # [[title, sent_id], ...]
+    if isinstance(supporting_facts, list):
+        out = set()
+        for item in supporting_facts:
+            if isinstance(item, (list, tuple)) and len(item) == 2:
+                title, sent_id = item
+                out.add((str(title), int(sent_id)))
+        return out
+
+    raise ValueError(f"Hotpot supporting_facts has unexpected type: {type(supporting_facts)}")
+
 
 def _join_hotpot_context(
     context_field: Any,
     *,
     mode: str,
-    supporting_facts: Optional[List[List[Any]]] = None,
+    supporting_facts: Optional[Any] = None,
 ) -> str:
-    if not isinstance(context_field, list):
-        raise ValueError(f"Hotpot context has unexpected type: {type(context_field)}")
-
-    sf_lookup = set()
-    if supporting_facts:
-        sf_lookup = {(str(title), int(sent_id)) for title, sent_id in supporting_facts}
+    context_items = _normalize_hotpot_context(context_field)
+    sf_lookup = _normalize_supporting_facts(supporting_facts)
 
     paragraphs: List[str] = []
-    for item in context_field:
-        if not isinstance(item, list) or len(item) != 2:
-            continue
-        title, sentences = item
-        title = str(title)
-        if not isinstance(sentences, list):
-            continue
-
+    for title, sentences in context_items:
         kept: List[str] = []
+
         if mode == "supporting_only":
             for i, sent in enumerate(sentences):
                 if (title, i) in sf_lookup:
@@ -121,7 +163,7 @@ def _join_hotpot_context(
 
 
 def iter_boolq_examples(split: str, limit: Optional[int]) -> Iterable[NormalizedExample]:
-    ds = load_dataset("google/boolq", split=split)
+    ds = load_dataset("google/boolq", "distractor",split=split)
     kept = 0
     for row_idx, row in enumerate(ds):
         query = str(row["question"]).strip()
@@ -158,7 +200,7 @@ def iter_hotpot_yesno_examples(
     *,
     context_mode: str,
 ) -> Iterable[NormalizedExample]:
-    ds = load_dataset("hotpotqa/hotpot_qa", split=split)
+    ds = load_dataset("hotpotqa/hotpot_qa","distractor", split=split)
     kept = 0
     seen = 0
     for row in ds:
@@ -300,6 +342,90 @@ def build_raw_examples(
         "examples_dev_json": examples_dev_json,
         "examples_test_json": examples_test_json,
     }
+
+# add this import near the top
+from transformers import AutoTokenizer
+
+
+def _build_eval_prompt_for_length(tok, question: str, context: str) -> str:
+    """
+    Match the prompt structure used by evaluate_questions.py as closely as possible.
+    """
+    user_msg = (
+        "Answer with exactly one word: true or false.\n"
+        "Use ONLY the context.\n\n"
+        f"Context:\n{context}\n\n"
+        f"question: {question}\n"
+        "Answer:"
+    )
+
+    if hasattr(tok, "apply_chat_template") and tok.chat_template is not None:
+        return tok.apply_chat_template(
+            [{"role": "user", "content": user_msg}],
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+
+    return user_msg
+
+
+def run_evaluate_length(*,examples_json: Path,
+    models: List[str],out_json: Optional[Path] = None,) -> Dict[str, Any]:
+    """
+    Update the JSON file with per-query token lengths for each model.
+    If out_json is None, updates examples_json in place.
+    """
+    payload = json.loads(examples_json.read_text(encoding="utf-8"))
+
+    if isinstance(payload, list):
+        rows = payload
+        payload_kind = "list"
+    elif isinstance(payload, dict) and "results" in payload:
+        rows = payload["results"]
+        payload_kind = "results_dict"
+    else:
+        raise ValueError("Unsupported JSON format: expected a list or a dict with 'results'")
+
+    # load tokenizers once
+    tokenizers: Dict[str, Any] = {}
+    for model_id in models:
+        tok = AutoTokenizer.from_pretrained(model_id, use_fast=True)
+        if tok.pad_token is None:
+            tok.pad_token = tok.eos_token
+        tokenizers[model_id] = tok
+
+    for row in rows:
+        query = row.get("query") or row.get("question")
+        context_path = row.get("context_path")
+
+        if not query:
+            continue
+        if not context_path:
+            continue
+
+        context_text = Path(context_path).read_text(encoding="utf-8")
+
+        row.setdefault("detected_lengths_by_model", {})
+
+        for model_id, tok in tokenizers.items():
+            q_len = len(tok(query, add_special_tokens=False)["input_ids"])
+            c_len = len(tok(context_text, add_special_tokens=False)["input_ids"])
+
+            row["detected_lengths_by_model"][model_id] = {
+                "question_tokens": int(q_len),
+                "context_tokens": int(c_len),
+            }
+
+    out_path = out_json or examples_json
+
+    if payload_kind == "list":
+        final_payload = rows
+    else:
+        payload["results"] = rows
+        final_payload = payload
+
+    _write_json(out_path, final_payload)
+    return final_payload
 
 
 def run_evaluate_questions(
@@ -479,10 +605,12 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--max_new_tokens", type=int, default=20)
     ap.add_argument("--train_ratio", type=float, default=0.8)
     ap.add_argument("--dev_ratio", type=float, default=0.1)
+    ap.add_argument("--eval_length", action="store_true", help="Compute tokenizer lengths")
+
     ap.add_argument(
         "--models",
         nargs="+",
-        default=["microsoft/Phi-3-mini-4k-instruct", "mistralai/Mistral-7B-Instruct-v0.3"],
+        default=["microsoft/Phi-3-mini-4k-instruct", "mistralai/Mistral-7B-Instruct-v0.3","Qwen/Qwen3-4B-Instruct-2507"],
     )
     return ap.parse_args()
 
@@ -516,6 +644,12 @@ def main() -> None:
     raw_report_path = paths["base_dir"] / "eval_report_raw.json"
     enriched_report_path = paths["base_dir"] / "eval_report.json"
 
+    if args.eval_length:
+        run_evaluate_length(
+            examples_json=paths["examples_json"],
+            models=list(args.models),
+        )
+
     run_evaluate_questions(
         examples_json=paths["examples_json"],
         out_report=raw_report_path,
@@ -545,6 +679,7 @@ def main() -> None:
     print(f"[ok] report for all-model flips: {filtered['all_models_flip']}")
     for model_name in args.models:
         key = f"per_model::{model_name}"
+        print(f"Current Model Evaluathion:{model_name}")
         if key in filtered:
             print(f"[ok] report for {model_name}: {filtered[key]}")
     for split_name in ("train", "dev", "test"):

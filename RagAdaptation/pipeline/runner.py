@@ -56,7 +56,7 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
         if ex_i in set(config.skip_example_indices):
             continue
         if config.examples_range is not None:
-            if ex_i <= config.examples_range[0] or ex_i >= config.examples_range[1]:
+            if ex_i < config.examples_range[0] or ex_i > config.examples_range[1]:
                 continue
 
         query = ex.get("query") or ex.get("question")
