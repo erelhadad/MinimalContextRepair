@@ -126,8 +126,8 @@ def _score_variants_sequential(model,prompt_id_lists: List[List[int]],variant_to
             scores[p_idx, v_idx] = float(seq_lp.detach().cpu().item())
 
         del input_ids, attention_mask, out, shift_logp, shift_labels, token_logp
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        # if torch.cuda.is_available():
+        #     torch.cuda.empty_cache()
 
     return scores
 

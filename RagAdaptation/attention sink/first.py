@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Optional, Sequence, List, Tuple, Dict, Any
-
+import json
 import numpy as np
 import torch
 from datasets import load_dataset
@@ -428,7 +428,14 @@ def inspect_attention(
         context=context,
         context_cite_at2_formating=False,
     )
-    attn = get_attention_scores(hf_model, hf_tok, hf_device, baseline_prompt)
+    attn = get_attention_scores(
+        hf_model,
+        hf_tok,
+        hf_device,
+        full_prompt=baseline_prompt,
+        full_context=context,
+        query=query,
+    )
 
     ordered_offsets_regular, scores_vec_regular, order_regular, ctx_offsets_regular = mask_by_order_inspect(
         full_context=context,
@@ -475,6 +482,14 @@ def inspect_attention(
             scores=scores_vec_regular,
         )
 
+    if hotpot and supporting_facts and scores_at_pick_recompute is not None:
+        out["supporting_facts_recompute"] = supporting_facts_scores(
+            supporting_facts=supporting_facts,
+            offsets=base_offsets_recompute,
+            context=context,
+            scores=scores_at_pick_recompute,
+        )    
+
     return out
 
 
@@ -516,8 +531,12 @@ def iter_examples(context_mode: str = "full", split: str = "validation"):
 # Example usage
 # -------------------------------------------------------------------------
 #
-model_con = ModelConfig("mistralai/Mistral-7B-Instruct-v0.3")
-for ex in iter_examples(context_mode="full", split="validation"):
+model_con = ModelConfig("microsoft/Phi-3-mini-4k-instruct")
+
+START_INDEX=88
+for i, ex in enumerate(iter_examples(context_mode="full", split="validation")):
+    if i < START_INDEX:
+        continue
     result = inspect_attention(
          query=ex["question"],
          model_con=model_con,
@@ -525,11 +544,31 @@ for ex in iter_examples(context_mode="full", split="validation"):
          hotpot=True,
          supporting_facts=ex["supporting_facts"],
          masking_iteration=5,
-     )
+    )
 
-    print(result["supporting_facts_regular"])
+    ques=ex["question"]
 
-    stop=input("stop?")
-    if stop=="stop":
-        break
+    
+    
+    '''
+    with open(f"output{ques}sp_regular.json", 'w') as json_file:
+        json.dump(result["supporting_facts_regular"], json_file, indent=4)
+    with open(f"output{ques}sp_recomp.json", 'w') as json_file:
+        json.dump(result["supporting_facts_recompute"], json_file, indent=4)
+    
+    '''
 
+    from pathlib import Path
+    import re
+
+    out_dir = Path("attention_sink_outputs")
+    out_dir.mkdir(exist_ok=True)
+
+    safe_ques = re.sub(r'[^A-Za-z0-9._ -]+', '_', ques)[:100]
+    out_path = out_dir / f"output_{safe_ques}_mistral.json"
+
+    with open(out_path, 'w') as json_file:
+        json.dump(result, json_file, indent=4)    
+
+
+    

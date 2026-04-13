@@ -25,6 +25,19 @@ def norm_expected(x):
         return "true" if x else "false"
     return normalize_true_false(str(x))
 
+import gc
+import json
+import torch
+from pathlib import Path
+
+def _is_cuda_oom(e: BaseException) -> bool:
+    msg = str(e).lower()
+    return isinstance(e, torch.OutOfMemoryError) or "cuda out of memory" in msg
+
+def _cleanup_after_oom():
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 def build_manifest(config: PipelineConfig, items_count: int) -> dict[str, Any]:
     return {
@@ -88,20 +101,38 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
             detect_flip_to_true = ex["per_model"][model_id]["prob_label_with_context"] == "false"
 
             mdl_dir = model_dir(ex_dir, model_id)
-            run_pipeline_fn(model_id=model_id,
-                query=query,
-                full_context=full_context,
-                methods=config.methods,
-                seeds=config.seeds,
-                out_dir=str(mdl_dir),
-                detect_flip_to_true=detect_flip_to_true,
-                dump_policy="flip",
-                dump_window=1,
-                recompute=config.recompute,
-                skip_recompute=config.skip_recompute,
-                save_logs= config.save_logs,
-                stop_on_flip= config.stop_at_flip,
-            )
-            print(f"[run] ex={ex_i} model={model_id} flip_to_true={detect_flip_to_true}")
+            try:
+                run_pipeline_fn(
+                    model_id=model_id,
+                    query=query,
+                    full_context=full_context,
+                    methods=config.methods,
+                    seeds=config.seeds,
+                    out_dir=str(mdl_dir),
+                    detect_flip_to_true=detect_flip_to_true,
+                    dump_policy="flip",
+                    dump_window=1,
+                    recompute=config.recompute,
+                    skip_recompute=config.skip_recompute,
+                    save_logs=config.save_logs,
+                    stop_on_flip=config.stop_at_flip,
+                )
+                print(f"[run] ex={ex_i} model={model_id} flip_to_true={detect_flip_to_true}")
+            except Exception as e:
+                if _is_cuda_oom(e):
+                    _cleanup_after_oom()
+                    err_path = Path(mdl_dir) / "pipeline_oom.json"
+                    err_path.parent.mkdir(parents=True, exist_ok=True)
+                    err_path.write_text(json.dumps({
+                        "status": "failed",
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                        "example_index": ex_i,
+                        "model_id": model_id,
+                        "query": query,
+                    }, indent=2), encoding="utf-8")
+                    print(f"[oom-skip] ex={ex_i} model={model_id}: {e}")
+                    continue
+                raise
 
     return run_root

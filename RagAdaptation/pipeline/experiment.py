@@ -74,53 +74,59 @@ def run_full_pipeline(*,model_id: str,
     for method_name in methods:
         if method_name == "baseline":
             continue
-        if method_name == "attention":
-            results["methods"]["attention"] = run_attention_method(model_con=model_config,out_dir=out_dir,
-                baseline_prompt=baseline_prompt,baseline_stats=baseline_stats,
-                full_context=full_context,query=query,
-                p_true_flipping=detect_flip_to_true,
-                dump_policy=dump_policy,dump_window=dump_window,save_logs=save_logs,
-                stop_on_flip=stop_on_flip,
-    )
+        try:
+            if method_name == "attention":
+                    results["methods"]["attention"] = run_attention_method(model_con=model_config,out_dir=out_dir,
+                        baseline_prompt=baseline_prompt,baseline_stats=baseline_stats,
+                        full_context=full_context,query=query,
+                        p_true_flipping=detect_flip_to_true,
+                        dump_policy=dump_policy,dump_window=dump_window,save_logs=save_logs,
+                        stop_on_flip=stop_on_flip,)
 
-        elif method_name == "random":
-            results["methods"]["random"] = run_random_method(
-                model_con=model_config,
-                out_dir=out_dir,baseline_stats=baseline_stats,
-                full_context=full_context,
-                query=query,seeds=seeds,
-                p_true_flipping=detect_flip_to_true,
-                dump_policy=dump_policy,dump_window=dump_window,
-                save_logs=save_logs,
-                stop_on_flip=stop_on_flip,
-            )
+            elif method_name == "random":
+                results["methods"]["random"] = run_random_method(
+                    model_con=model_config,
+                    out_dir=out_dir,baseline_stats=baseline_stats,
+                    full_context=full_context,
+                    query=query,seeds=seeds,
+                    p_true_flipping=detect_flip_to_true,
+                    dump_policy=dump_policy,dump_window=dump_window,
+                    save_logs=save_logs,
+                    stop_on_flip=stop_on_flip,
+                )
 
-        elif method_name == "context_cite":
-            results["methods"]["context_cite"] = run_context_cite_method(
-                model_con=model_config,
-                out_dir=out_dir,
-                baseline_stats=baseline_stats,
-                full_context=full_context,
-                query=query,p_true_flipping=detect_flip_to_true,
-                dump_policy=dump_policy,dump_window=dump_window,
-                save_logs=save_logs,
-                stop_on_flip=stop_on_flip,
-            )
-        elif method_name == "at2":
-            results["methods"]["at2"] = run_at2_method(
-                model_con=model_config,
-                out_dir=out_dir,
-                baseline_stats=baseline_stats,
-                model_id=model_id,
-                full_context=full_context,
-                query=query,
-                p_true_flipping=detect_flip_to_true,
-                dump_policy=dump_policy,
-                dump_window=dump_window,save_logs=save_logs,
-                stop_on_flip=stop_on_flip,
-    )
-        else:
-            raise ValueError(f"Unknown method: {method_name}")
+            elif method_name == "context_cite":
+                results["methods"]["context_cite"] = run_context_cite_method(
+                    model_con=model_config,
+                    out_dir=out_dir,
+                    baseline_stats=baseline_stats,
+                    full_context=full_context,
+                    query=query,p_true_flipping=detect_flip_to_true,
+                    dump_policy=dump_policy,dump_window=dump_window,
+                    save_logs=save_logs,
+                    stop_on_flip=stop_on_flip,
+                )
+            elif method_name == "at2":
+                results["methods"]["at2"] = run_at2_method(
+                    model_con=model_config,
+                    out_dir=out_dir,
+                    baseline_stats=baseline_stats,
+                    model_id=model_id,
+                    full_context=full_context,
+                    query=query,
+                    p_true_flipping=detect_flip_to_true,
+                    dump_policy=dump_policy,
+                    dump_window=dump_window,save_logs=save_logs,
+                    stop_on_flip=stop_on_flip,)
+            else:
+                raise ValueError(f"Unknown method: {method_name}")
+        except Exception as e:
+            results["methods"][method_name] = {
+                "status": "failed",
+                "error_type": type(e).__name__,
+                "error": str(e),
+            }
+
 
     if skip_recompute is not None and 1 in skip_recompute:
         for rec_method in recompute:
@@ -154,7 +160,6 @@ def run_full_pipeline(*,model_id: str,
                         skip_recompute=val,
                         save_logs=save_logs,
                         stop_on_flip=stop_on_flip,
-
                     )
                     results["methods"][f"{result_name}_SR{val}"] = payload
                 except Exception as e:

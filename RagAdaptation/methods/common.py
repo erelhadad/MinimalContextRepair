@@ -100,15 +100,8 @@ def create_masked_prompts_iterative(
     return batch, masked_context_list
 
 
-def get_attention_scores(
-    hf_model,
-    hf_tok,
-    hf_device,
-    *,
-    full_prompt: str,
-    full_context: str,
-    query: str,
-):
+def get_attention_scores(hf_model,hf_tok,hf_device,
+    *,full_prompt: str,full_context: str,query: str,):
     """
     Compute regular attention-based token scores for the context tokens only.
 
@@ -124,12 +117,9 @@ def get_attention_scores(
         Scores on CPU.
     """
     # 1) tokenize with offsets so we can locate context/query spans inside the full prompt
-    enc_full = hf_tok(
-        full_prompt,
-        add_special_tokens=False,
+    enc_full = hf_tok(full_prompt,add_special_tokens=False,
         return_offsets_mapping=True,
-        truncation=False,
-        padding=False,
+        truncation=False,padding=False,
     )
 
     offsets_full = enc_full["offset_mapping"]
@@ -137,36 +127,28 @@ def get_attention_scores(
         offsets_full = offsets_full.tolist()
 
     ctx_token_indices, _ctx_rel_offsets, after_ctx = find_token_indices_by_substring(
-        full_prompt,
-        full_context,
-        offsets_full,
-        start_search_at=0,
+        full_prompt,full_context,
+        offsets_full,start_search_at=0,
     )
 
     q_token_indices, _, _ = find_token_indices_by_substring(
-        full_prompt,
-        query,
-        offsets_full,
-        start_search_at=after_ctx,
+        full_prompt,query,
+        offsets_full,start_search_at=after_ctx,
     )
 
     # 2) tokenize again for the actual model forward
-    enc = hf_tok(
-        full_prompt,
-        add_special_tokens=False,
-        return_tensors="pt",
-        truncation=False,
-        padding=False,
+    enc = hf_tok(full_prompt,
+        add_special_tokens=False,return_tensors="pt",truncation=False,padding=False,
     )
     enc = {k: v.to(hf_device) for k, v in enc.items()}
 
     # 3) forward with attentions
-    with torch.no_grad():
-        out = hf_model(
-            **enc,
-            output_attentions=True,
-            return_dict=True,
-            use_cache=False,
+
+    #with torch.no_grad():
+    with torch.inference_mode():
+        out = hf_model(**enc,output_attentions=True,
+            output_hidden_states=False,
+            return_dict=True,use_cache=False,
         )
 
     attn_layers = out.attentions
@@ -187,7 +169,6 @@ def get_attention_scores(
     del out, attn_layers, last, attn_avg, q_idx, c_idx, q_to_c, enc
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-
     return scores_vec
 
 def _label_from_stats(st: Dict[str, Any]) -> str:
@@ -221,20 +202,38 @@ def dump_masked_prompts_json(
     order: Optional[Sequence[int]] = None,
     scores_at_pick: Optional[Sequence[float]] = None,
     policy: str = "flip",
-    window: int = 1,) -> str:
+    window: int = 1,
+) -> str:
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+
+    n_steps = min(len(masked_prompts), len(masked_stats))
+    if masked_context_list is not None:
+        n_steps = min(n_steps, len(masked_context_list))
+    if order is not None:
+        n_steps = min(n_steps, len(order))
+    if scores_at_pick is not None:
+        n_steps = min(n_steps, len(scores_at_pick))
+
+    masked_prompts = masked_prompts[:n_steps]
+    masked_stats = masked_stats[:n_steps]
+    if masked_context_list is not None:
+        masked_context_list = masked_context_list[:n_steps]
+    if order is not None:
+        order = order[:n_steps]
+    if scores_at_pick is not None:
+        scores_at_pick = scores_at_pick[:n_steps]
 
     flip_idx = _first_flip_idx(baseline_stats, list(masked_stats))
     idxs: List[int] = []
 
     if policy == "all":
-        idxs = list(range(len(masked_prompts)))
+        idxs = list(range(n_steps))
     else:
         if flip_idx is None:
-            idxs = [0] if len(masked_prompts) > 0 else []
+            idxs = [0] if n_steps > 0 else []
         else:
             lo = max(0, flip_idx - window)
-            hi = min(len(masked_prompts) - 1, flip_idx + window)
+            hi = min(n_steps - 1, flip_idx + window)
             idxs = sorted(set([0] + list(range(lo, hi + 1))))
 
     masked_entries = []
@@ -242,9 +241,9 @@ def dump_masked_prompts_json(
         ent = {"step": int(i + 1), "prompt": masked_prompts[i], "stats": masked_stats[i]}
         if masked_context_list is not None:
             ent["masked_context"] = masked_context_list[i]
-        if order is not None and i < len(order):
+        if order is not None:
             ent["newly_masked_base_pos"] = int(order[i])
-        if scores_at_pick is not None and i < len(scores_at_pick):
+        if scores_at_pick is not None:
             ent["score_at_pick"] = float(scores_at_pick[i])
         masked_entries.append(ent)
 
@@ -264,7 +263,7 @@ def dump_masked_prompts_json(
         },
         "integrity": {
             "baseline_prompt_sha1": _sha1(baseline_prompt),
-            "n_masked_total": int(len(masked_prompts)),
+            "n_masked_total": int(n_steps),
         },
     }
 
@@ -389,7 +388,7 @@ def mask_by_order(
         masked_prompts,
         hf_device,
         None,
-        batch_size=8,
+        batch_size=2,
         return_full_logp=True,
         file_name=compute_probs_file_name,
         detect_flip_to_true=p_true_flipping,
@@ -398,6 +397,14 @@ def mask_by_order(
         save_file=save_logs,
         stop_on_flip=stop_on_flip,
     )
+    # keep parallel arrays aligned if compute_probs stopped early on flip
+    effective_steps = len(masked_stats)
+    if effective_steps < len(masked_prompts):
+        masked_prompts = masked_prompts[:effective_steps]
+        masked_context_list = masked_context_list[:effective_steps]
+        order = list(order)[:effective_steps]
+        if scores_vec is not None:
+            scores_vec = np.asarray(scores_vec, dtype=np.float32)
 
     if dump_json_path and save_logs:
         pick_scores = None if scores_vec is None else [float(scores_vec[i]) for i in order]
