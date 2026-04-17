@@ -126,8 +126,8 @@ def _score_variants_sequential(model,prompt_id_lists: List[List[int]],variant_to
             scores[p_idx, v_idx] = float(seq_lp.detach().cpu().item())
 
         del input_ids, attention_mask, out, shift_logp, shift_labels, token_logp
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        # if torch.cuda.is_available():
+        #     torch.cuda.empty_cache()
 
     return scores
 
@@ -207,8 +207,13 @@ def compute_probs(
     # expands into several variants, so we micro-batch the expanded rows.
     row_batch_size = max(1, int(batch_size))
     flag_flip_stop=False
+    n=len(prompts)
+    flag_seq_flip=False
+    seq_flip=int(n/100) if n>=1000 else int(n/10)
 
-    for i in range(0, len(prompts), batch_size):
+    pass_no_flip=10
+
+    for i in range(0, n , batch_size):
             chunk = prompts[i : i + batch_size]
 
             prompt_id_lists = [
@@ -271,6 +276,10 @@ def compute_probs(
                 res["is_flipped"]=flip_cond
                 if flip_cond and first_flip_index is None:
                     first_flip_index = i + j
+                    flag_seq_flip= True
+                    seq_flip = int(n / 100)
+                    pass_no_flip = 10
+
                     if stop_on_flip:
                         flag_flip_stop=True
 
@@ -286,6 +295,22 @@ def compute_probs(
                         )
                         log_f.write(f"After {i + j} iterations we had converted\n")
                         log_f.write(f"The prompt:\n{prompts[i + j]}\n")
+
+                elif flip_cond:
+                    seq_flip-=1
+                    pass_no_flip=10
+                    flag_seq_flip = True
+                    if seq_flip==0:
+                        flag_flip_stop = True
+
+                else:
+                    if flag_seq_flip:
+                        if pass_no_flip==0:
+                            seq_flip = int(n / 100)
+                            flag_seq_flip=False
+                        else:
+                            pass_no_flip -=1
+
 
                 if return_full_logp:
                     p_true_values.append(float(p_true_out_of_true_and_false))

@@ -1,14 +1,17 @@
 from __future__ import annotations
-
-import json
+import os
+os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 from datetime import datetime, timezone
+from typing import Any, Callable
+import gc
+import json
+import torch
 from pathlib import Path
-from typing import Any, Callable, Iterable
-
 from RagAdaptation.core.artifacts import create_run_root, example_dir, model_dir, write_example_inputs, write_manifest
 from RagAdaptation.core.documents import combine_document_text, load_documents_any
 from RagAdaptation.pipeline.config import PipelineConfig
 from RagAdaptation.prompts_format import normalize_true_false
+from RagAdaptation.core.models import cleanup_memory, unload_all_hf_models
 
 
 def load_items(path: str | Path):
@@ -26,6 +29,13 @@ def norm_expected(x):
     return normalize_true_false(str(x))
 
 
+def _is_cuda_oom(e: BaseException) -> bool:
+    msg = str(e).lower()
+    return isinstance(e, torch.OutOfMemoryError) or "cuda out of memory" in msg
+
+def _cleanup_after_oom()-> None:
+    cleanup_memory()
+
 def build_manifest(config: PipelineConfig, items_count: int) -> dict[str, Any]:
     return {
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -40,6 +50,7 @@ def build_manifest(config: PipelineConfig, items_count: int) -> dict[str, Any]:
         "skip_example_indices": list(config.skip_example_indices),
         "save_logs":config.save_logs,
         "stop_at_flip":config.stop_at_flip,
+        "examples_range":config.examples_range,
     }
 
 
@@ -54,6 +65,10 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
     for ex_i, ex in enumerate(items):
         if ex_i in set(config.skip_example_indices):
             continue
+        if config.examples_range is not None:
+            lo, hi = config.examples_range
+            if ex_i < lo or ex_i > hi:
+                continue
 
         query = ex.get("query") or ex.get("question")
         if query is None:
@@ -74,7 +89,6 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
         ex_dir = example_dir(run_root, ex_i)
         write_example_inputs(ex_dir, example_payload=ex, context_text=full_context)
 
-
         for model_id in config.models:
             model_info = ex.get("per_model", {}).get(model_id)
             if not model_info or not model_info.get("relevant", False):
@@ -84,20 +98,39 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
             detect_flip_to_true = ex["per_model"][model_id]["prob_label_with_context"] == "false"
 
             mdl_dir = model_dir(ex_dir, model_id)
-            run_pipeline_fn(model_id=model_id,
-                query=query,
-                full_context=full_context,
-                methods=config.methods,
-                seeds=config.seeds,
-                out_dir=str(mdl_dir),
-                detect_flip_to_true=detect_flip_to_true,
-                dump_policy="flip",
-                dump_window=1,
-                recompute=config.recompute,
-                skip_recompute=config.skip_recompute,
-                save_logs= config.save_logs,
-                stop_on_flip= config.stop_at_flip,
-            )
-            print(f"[run] ex={ex_i} model={model_id} flip_to_true={detect_flip_to_true}")
+            try:
+                run_pipeline_fn(
+                    model_id=model_id,
+                    query=query,
+                    full_context=full_context,
+                    methods=config.methods,
+                    seeds=config.seeds,
+                    out_dir=str(mdl_dir),
+                    detect_flip_to_true=detect_flip_to_true,
+                    dump_policy="flip",
+                    dump_window=1,
+                    recompute=config.recompute,
+                    skip_recompute=config.skip_recompute,
+                    save_logs=config.save_logs,
+                    stop_on_flip=config.stop_at_flip,
+                )
+                print(f"[run] ex={ex_i} model={model_id} flip_to_true={detect_flip_to_true}")
+            except Exception as e:
+                if _is_cuda_oom(e):
+                    _cleanup_after_oom()
+                    err_path = Path(mdl_dir) / "pipeline_oom.json"
+                    err_path.parent.mkdir(parents=True, exist_ok=True)
+                    err_path.write_text(json.dumps({
+                        "status": "failed",
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                        "example_index": ex_i,
+                        "model_id": model_id,
+                        "query": query,
+                    }, indent=2), encoding="utf-8")
+                    print(f"[oom-skip] ex={ex_i} model={model_id}: {e}")
+                    continue
+                raise
+
 
     return run_root

@@ -10,7 +10,15 @@ from RagAdaptation.core.model_config import ModelConfig
 def run_attention_method(*,model_con:ModelConfig, out_dir: str, baseline_prompt: str, baseline_stats: Dict[str, Any], full_context: str, query: str, p_true_flipping: bool, dump_policy: str, dump_window: int,save_logs:bool=True, stop_on_flip: bool=False,
                          ):
     hf_model, hf_tok, hf_device= model_con.load()
-    attn = get_attention_scores(hf_model, hf_tok, hf_device, baseline_prompt)
+    attn = get_attention_scores(
+        hf_model,
+        hf_tok,
+        hf_device,
+        full_prompt=baseline_prompt,
+        full_context=full_context,
+        query=query,
+    )
+
     method_path = method_dir(out_dir, "attention")
     masked_stats, masked_logps = mask_by_order(
         full_context,

@@ -45,10 +45,11 @@ def run_at2_method(
     if est_path is None:
         raise ValueError(f"No AT2 estimator registered for model={model_id}")
 
-    hf_model_at2, hf_tok_at2, hf_device_at2 = get_hf_scorer_single_device(
-        model_id=model_id,
-        device="cuda:0",
-    )
+    # in run_at2_method / recompute_at2
+    hf_model_main, hf_tok_main, hf_device_main = model_con.load()
+
+    # prefer reuse on single-GPU runs
+    hf_model_at2, hf_tok_at2, hf_device_at2 = hf_model_main, hf_tok_main, hf_device_main
 
     scores, gen, sources = get_at2_token_scores(
         full_context=full_context,

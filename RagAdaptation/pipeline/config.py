@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Sequence, List
+from typing import Sequence, List, Tuple, Optional
 
 from RagAdaptation.core.paths import RUNS_DIR
 
@@ -22,4 +22,5 @@ class PipelineConfig:
     skip_recompute: List[int] = None
     save_logs :bool = True
     stop_at_flip :bool = True
+    examples_range: Tuple[int,Optional[int]] = None
 

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, List
 
 from RagAdaptation.core.models import get_hf_scorer, get_hf_scorer_single_device
-from RagAdaptation.prompts_format import TF_RAG_TEMPLATE, TF_RAG_TEMPLATE_A2T
+from RagAdaptation.prompts_format import TF_RAG_TEMPLATE, TF_RAG_TEMPLATE_A2T, TF_NO_CONTEXT_TEMPLATE
 
 
 @dataclass
@@ -115,8 +115,9 @@ class ModelConfig:
 
 
     def format_prompt(self,*,question: str, context: str,
-        context_cite_at2_formating: bool = False,) -> str:
-
+        context_cite_at2_formating: bool = False,empty:bool=False) -> str:
+        if context=="" or empty:
+            return TF_NO_CONTEXT_TEMPLATE.format(question=question)
         template = self.get_prompt_template(context_cite_at2=context_cite_at2_formating)
 
         if context_cite_at2_formating:
@@ -125,44 +126,6 @@ class ModelConfig:
 
         # TF_RAG_TEMPLATE expects {question}
         return template.format(context=context, question=question)
-
-    def build_chat_prompt(
-        self,*,
-        question: str,context: str = "",
-        reasoning: Optional[bool] = None,) -> str:
-        """
-        Uses tokenizer chat template if available; otherwise falls back to raw prompt text.
-        This is the right place to later add Qwen reasoning-specific logic.
-        """
-        if self.tok_hf is None:
-            self.load()
-
-        reasoning = self.default_reasoning if reasoning is None else reasoning
-
-        user_msg = ("Answer with exactly one word: true or false.\n"
-            "Use ONLY the context.\n\n"
-            f"Context:\n{context}\n\n"
-            f"question: {question}\n"
-            "Answer:"
-        )
-
-        tok = self.tok_hf
-        if hasattr(tok, "apply_chat_template") and tok.chat_template is not None:
-            messages = [{"role": "user", "content": user_msg}]
-
-            # keep this branch tiny for now; later you can extend it if Qwen needs a flag
-            if self.supports_reasoning_toggle:
-                # placeholder for future reasoning plumbing
-                # e.g. tokenizer/template kwargs if needed later
-                pass
-
-            return tok.apply_chat_template(
-                messages,
-                tokenize=False,
-                add_generation_prompt=True,
-            )
-
-        return user_msg
 
 
     # -------- scoring helpers --------

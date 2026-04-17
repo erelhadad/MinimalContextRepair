@@ -72,6 +72,60 @@ def mask_context_spans_same_length(text: str, spans: Sequence[Tuple[int, int]]) 
     return out
 
 
+def _get_mask_prompt_template(change_template_contextCite: bool):
+    if change_template_contextCite:
+        return ChatPromptTemplate.from_template(TF_RAG_TEMPLATE_A2T)
+    return ChatPromptTemplate.from_template(TF_RAG_TEMPLATE)
+
+
+
+def iter_masked_prompts_iterative_chunks(
+    document: str,
+    query: str,
+    offsets: List[Tuple[int, int]],
+    *,
+    k: int = 1,
+    change_template_contextCite: bool = False,
+    chunk_size: int = 32,
+):
+    """
+    Yield masked prompts in chunks while preserving the exact cumulative masking logic
+    of the original implementation.
+
+    Semantics are unchanged:
+      step i masks offsets[0], ..., offsets[i]
+
+    The only difference is execution style: prompts are built lazily in small chunks
+    instead of materializing the full masking trajectory up front.
+    """
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+
+    prompt_template = _get_mask_prompt_template(change_template_contextCite)
+    masked_spans: List[Tuple[int, int]] = []
+    prompt_chunk: List[str] = []
+    context_chunk: List[str] = []
+
+    for i in range(len(offsets)):
+        masked_spans.extend(offsets[i : i + k])
+        masked_context = mask_context_spans_same_length(document, masked_spans)
+        context_chunk.append(masked_context)
+
+        if change_template_contextCite:
+            prompt_chunk.append(prompt_template.format(context=masked_context, query=query))
+        else:
+            prompt_chunk.append(prompt_template.format(context=masked_context, question=query))
+
+        if len(prompt_chunk) >= chunk_size:
+            yield prompt_chunk, context_chunk
+            prompt_chunk = []
+            context_chunk = []
+
+    if prompt_chunk:
+        yield prompt_chunk, context_chunk
+
+
+
 def create_masked_prompts_iterative(
     document: str,
     query: str,
@@ -79,50 +133,247 @@ def create_masked_prompts_iterative(
     k: int = 1,
     change_template_contextCite: bool = False,
 ):
-    if change_template_contextCite:
-        prompt_template = ChatPromptTemplate.from_template(TF_RAG_TEMPLATE_A2T)
-    else:
-        prompt_template = ChatPromptTemplate.from_template(TF_RAG_TEMPLATE)
-
+    """
+    Compatibility wrapper that preserves the old return value by materializing the
+    chunked iterator.
+    """
     batch: List[str] = []
     masked_context_list: List[str] = []
-    masked_spans: List[Tuple[int, int]] = []
-
-    for i in range(len(offsets)):
-        masked_spans.extend(offsets[i : i + k])
-        masked_context = mask_context_spans_same_length(document, masked_spans)
-        masked_context_list.append(masked_context)
-        if change_template_contextCite:
-            batch.append(prompt_template.format(context=masked_context, query=query))
-        else:
-            batch.append(prompt_template.format(context=masked_context, question=query))
+    for prompt_chunk, context_chunk in iter_masked_prompts_iterative_chunks(
+        document,
+        query,
+        offsets,
+        k=k,
+        change_template_contextCite=change_template_contextCite,
+        chunk_size=max(1, len(offsets) or 1),
+    ):
+        batch.extend(prompt_chunk)
+        masked_context_list.extend(context_chunk)
 
     return batch, masked_context_list
 
 
-def get_attention_scores(hf_model, hf_tok, hf_device, full_prompt: str):
+
+def _infer_attention_model_type(hf_model) -> str:
+    name = str(getattr(hf_model, "name_or_path", "")).lower()
+    if "mistral" in name:
+        return "mistral"
+    if "llama" in name:
+        return "llama"
+    if "phi-3" in name or "phi3" in name or "phi_3" in name:
+        return "phi3"
+    if "qwen" in name:
+        return "qwen2"
+    if "gemma" in name:
+        return "gemma"
+    raise ValueError(f"Unsupported model for attention extraction: {hf_model.name_or_path}")
+
+
+def _get_transformers_attention_helpers(model_type: str):
+    import transformers.models
+
+    model_module_name = {
+        "llama": "llama",
+        "mistral": "mistral",
+        "phi3": "phi3",
+        "qwen2": "qwen2",
+        "gemma": "gemma2",
+    }[model_type]
+
+    model_module = getattr(transformers.models, model_module_name)
+    modeling_module = getattr(model_module, f"modeling_{model_module_name}")
+    return modeling_module.apply_rotary_pos_emb, modeling_module.repeat_kv
+
+
+def _get_llm_core_and_layers(hf_model):
+    core = getattr(hf_model, "model", None)
+    if core is None or not hasattr(core, "layers"):
+        raise ValueError("Expected a decoder-only HF model with `model.layers`.")
+    return core, core.layers
+
+
+def _build_causal_mask_for_hidden_states(hf_model, hidden_states):
+    """
+    Build the same style of causal mask used by the AT2 attention extraction path,
+    but only once for the current prompt length.
+    """
+    input_embeds = hidden_states[0]
+    _, seq_len, _ = input_embeds.shape
+    device = input_embeds.device
+    dtype = getattr(hf_model, "dtype", input_embeds.dtype)
+
+    position_ids = torch.arange(0, seq_len, device=device).unsqueeze(0)
+
+    attention_mask = torch.ones(seq_len, seq_len + 1, device=device, dtype=dtype)
+    attention_mask = torch.triu(attention_mask, diagonal=1)
+    attention_mask *= torch.finfo(dtype).min
+    attention_mask = attention_mask[None, None]  # [1, 1, seq, seq+1]
+    return position_ids, attention_mask
+
+
+def _project_qk_last_layer(
+    hf_model,
+    hidden_states,
+    *,
+    model_type: str,
+):
+    """
+    Reconstruct Q/K for the LAST attention layer from hidden states, without asking
+    the full model to materialize output_attentions=True.
+
+    This follows the AT2 idea: compute only what we need from hidden states instead of
+    storing the full attention tensors for every layer.
+    """
+    core, layers = _get_llm_core_and_layers(hf_model)
+    layer = layers[-1]
+    self_attn = layer.self_attn
+
+    layer_input = hidden_states[-2]
+    layer_input = layer.input_layernorm(layer_input)
+
+    bsz, q_len, _ = layer_input.size()
+    cfg = core.config
+    num_attention_heads = cfg.num_attention_heads
+    num_key_value_heads = cfg.num_key_value_heads
+    head_dim = self_attn.head_dim
+
+    if model_type in ("llama", "mistral", "qwen2", "gemma"):
+        query_states = self_attn.q_proj(layer_input)
+        key_states = self_attn.k_proj(layer_input)
+    elif model_type == "phi3":
+        qkv = self_attn.qkv_proj(layer_input)
+        query_pos = num_attention_heads * head_dim
+        query_states = qkv[..., :query_pos]
+        key_states = qkv[..., query_pos : query_pos + num_key_value_heads * head_dim]
+    else:
+        raise ValueError(f"Unsupported model_type={model_type!r}")
+
+    query_states = query_states.view(bsz, q_len, num_attention_heads, head_dim).transpose(1, 2)
+    key_states = key_states.view(bsz, q_len, num_key_value_heads, head_dim).transpose(1, 2)
+
+    if model_type == "gemma":
+        if hasattr(self_attn, "q_norm") and self_attn.q_norm is not None:
+            query_states = self_attn.q_norm(query_states)
+        if hasattr(self_attn, "k_norm") and self_attn.k_norm is not None:
+            key_states = self_attn.k_norm(key_states)
+
+    position_ids, attention_mask = _build_causal_mask_for_hidden_states(hf_model, hidden_states)
+
+    if hasattr(core, "rotary_emb_local") and getattr(self_attn, "is_sliding", False):
+        position_embeddings = core.rotary_emb_local(layer_input, position_ids)
+    else:
+        position_embeddings = core.rotary_emb(layer_input, position_ids)
+
+    cos, sin = position_embeddings
+    apply_rotary_pos_emb, repeat_kv = _get_transformers_attention_helpers(model_type)
+    query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+    key_states = repeat_kv(key_states, self_attn.num_key_value_groups)
+    causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+    return query_states, key_states, causal_mask, head_dim
+
+
+def get_attention_scores(
+    hf_model,
+    hf_tok,
+    hf_device,
+    *,
+    full_prompt: str,
+    full_context: str,
+    query: str,
+):
+    """
+    Compute context-token attention scores without materializing output_attentions=True.
+
+    Scoring rule stays the same as before:
+      - use the LAST layer
+      - average across heads
+      - take question -> context attention
+      - sum over question tokens
+
+    The difference is only the extraction path:
+    we reconstruct the relevant last-layer attention block from hidden states, in the
+    style used by AT2, instead of storing the full attention tensor for the whole model.
+    """
+    enc_full = hf_tok(
+        full_prompt,
+        add_special_tokens=False,
+        return_offsets_mapping=True,
+        truncation=False,
+        padding=False,
+    )
+
+    offsets_full = enc_full["offset_mapping"]
+    if hasattr(offsets_full, "tolist"):
+        offsets_full = offsets_full.tolist()
+
+    ctx_token_indices, _ctx_rel_offsets, after_ctx = find_token_indices_by_substring(
+        full_prompt,
+        full_context,
+        offsets_full,
+        start_search_at=0,
+    )
+    q_token_indices, _, _ = find_token_indices_by_substring(
+        full_prompt,
+        query,
+        offsets_full,
+        start_search_at=after_ctx,
+    )
+
+    if not ctx_token_indices:
+        raise ValueError("Could not find any context tokens inside the full prompt.")
+    if not q_token_indices:
+        raise ValueError("Could not find any query tokens inside the full prompt.")
+
     enc = hf_tok(
         full_prompt,
         add_special_tokens=False,
         return_tensors="pt",
-        padding=True,
         truncation=False,
+        padding=False,
     )
     enc = {k: v.to(hf_device) for k, v in enc.items()}
 
-    with torch.no_grad():
+    with torch.inference_mode():
         out = hf_model(
             **enc,
-            output_attentions=True,
+            output_hidden_states=True,
+            output_attentions=False,
             return_dict=True,
+            use_cache=False,
         )
 
-    attention_scores = out.attentions
-    if attention_scores is None:
-        raise ValueError(f"Model  did not return attentions.")
+    hidden_states = out.hidden_states
+    if hidden_states is None:
+        raise ValueError("Model did not return hidden states.")
 
-    return attention_scores
+    model_type = _infer_attention_model_type(hf_model)
+    query_states, key_states, causal_mask, head_dim = _project_qk_last_layer(
+        hf_model,
+        hidden_states,
+        model_type=model_type,
+    )
 
+    q_start = q_token_indices[0]
+    q_end = q_token_indices[-1] + 1
+
+    query_states = query_states[:, :, q_start:q_end, :]
+    causal_mask = causal_mask[:, :, q_start:q_end, :]
+
+    attn_scores = torch.matmul(query_states, key_states.transpose(2, 3)) / np.sqrt(float(head_dim))
+    attn_scores = attn_scores + causal_mask
+    attn_weights = torch.softmax(attn_scores, dim=-1, dtype=torch.float32)
+
+    last_layer_q_to_all = attn_weights[0].mean(dim=0)  # [|Q|, seq]
+    c_idx = torch.tensor(ctx_token_indices, device=last_layer_q_to_all.device, dtype=torch.long)
+    q_to_c = last_layer_q_to_all.index_select(1, c_idx)
+    scores_vec = q_to_c.sum(dim=0).detach().float().cpu().numpy().astype(np.float32, copy=False)
+
+    del out, hidden_states, query_states, key_states, causal_mask, attn_scores, attn_weights, last_layer_q_to_all, q_to_c, c_idx, enc
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    return scores_vec
 
 def _label_from_stats(st: Dict[str, Any]) -> str:
     return "true" if float(st["p_true"]) > 0.5 else "false"
@@ -143,6 +394,141 @@ def _sha1(s: str) -> str:
     return hashlib.sha1(s.encode("utf-8")).hexdigest()
 
 
+def _rewrite_chunked_step_metadata(masked_stats: List[Dict[str, Any]], *, step_offset: int) -> None:
+    """
+    Adjust chunk-local step indices returned by compute_probs to global masking steps.
+    """
+    for local_i, st in enumerate(masked_stats):
+        global_step = step_offset + local_i + 1
+        st["step_index"] = global_step
+        if st.get("is_flipped"):
+            st["first_flip_index"] = global_step
+
+
+
+def _write_compute_probs_flip_log(
+    file_name: str,
+    *,
+    masked_prompts: Sequence[str],
+    masked_stats: Sequence[Dict[str, Any]],
+) -> None:
+    """
+    Recreate the lightweight compute_probs flip log for the chunked execution path.
+
+    The original compute_probs implementation only writes a short file when a flip is
+    found, so reproducing that behavior is enough to stay compatible with current usage.
+    """
+    if not file_name:
+        return
+
+    flip_idx = None
+    for i, st in enumerate(masked_stats):
+        if st.get("is_flipped"):
+            flip_idx = i
+            break
+
+    if flip_idx is None:
+        return
+
+    p = Path(file_name)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    st = masked_stats[flip_idx]
+    step0 = int(st.get("step_index", flip_idx + 1)) - 1
+
+    with p.open("w", encoding="utf-8") as f:
+        f.write(
+            f"[{step0}] logP_true={float(st['logP_true']):.4f} "
+            f"logP_false={float(st['logP_false']):.4f} "
+            f"log_odds={float(st['log_odds']):.4f} "
+            f"p_true={float(st['p_true']):.6f}\n\n"
+        )
+        f.write(f"After {step0} iterations we had converted\n")
+        f.write(f"The prompt:\n{masked_prompts[flip_idx]}\n")
+
+
+
+def _compute_probs_streaming_until_flip(
+    *,
+    document: str,
+    query: str,
+    ordered_offsets: List[Tuple[int, int]],
+    change_template_contextCite: bool,
+    hf_model,
+    hf_tok,
+    hf_device,
+    true_variants,
+    false_variants,
+    compute_probs_file_name: str,
+    p_true_flipping: bool,
+    save_logs: bool,
+    chunk_size: int = 32,
+):
+    """
+    Stream masked prompts chunk-by-chunk until compute_probs finds a flip.
+
+    Important semantic note:
+      - This path is used only for stop_on_flip=True.
+      - The masking logic is identical to the original implementation.
+      - We change only prompt handling: lazy chunked creation instead of eager full-list
+        materialization.
+    """
+    masked_prompts_acc: List[str] = []
+    masked_contexts_acc: List[str] = []
+    masked_stats_acc: List[Dict[str, Any]] = []
+    masked_logps_acc: List[float] = []
+
+    step_offset = 0
+    stopped_early = False
+
+    for prompt_chunk, context_chunk in iter_masked_prompts_iterative_chunks(
+        document,
+        query,
+        ordered_offsets,
+        change_template_contextCite=change_template_contextCite,
+        chunk_size=chunk_size,
+    ):
+        chunk_stats, chunk_logps = compute_probs(
+            hf_model,
+            hf_tok,
+            prompt_chunk,
+            hf_device,
+            None,
+            batch_size=2,
+            return_full_logp=True,
+            file_name=compute_probs_file_name,
+            detect_flip_to_true=p_true_flipping,
+            true_variants=true_variants,
+            false_variants=false_variants,
+            save_file=False,
+            stop_on_flip=True,
+        )
+
+        _rewrite_chunked_step_metadata(chunk_stats, step_offset=step_offset)
+
+        effective_steps = len(chunk_stats)
+        masked_prompts_acc.extend(prompt_chunk[:effective_steps])
+        masked_contexts_acc.extend(context_chunk[:effective_steps])
+        masked_stats_acc.extend(chunk_stats)
+        if chunk_logps is not None:
+            masked_logps_acc.extend(chunk_logps[:effective_steps])
+
+        step_offset += effective_steps
+
+        if effective_steps < len(prompt_chunk):
+            stopped_early = True
+            break
+
+    if save_logs:
+        _write_compute_probs_flip_log(
+            compute_probs_file_name,
+            masked_prompts=masked_prompts_acc,
+            masked_stats=masked_stats_acc,
+        )
+
+    return masked_prompts_acc, masked_contexts_acc, masked_stats_acc, masked_logps_acc, stopped_early
+
+
+
 def dump_masked_prompts_json(
     out_path: str,
     *,
@@ -155,20 +541,38 @@ def dump_masked_prompts_json(
     order: Optional[Sequence[int]] = None,
     scores_at_pick: Optional[Sequence[float]] = None,
     policy: str = "flip",
-    window: int = 1,) -> str:
+    window: int = 1,
+) -> str:
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+
+    n_steps = min(len(masked_prompts), len(masked_stats))
+    if masked_context_list is not None:
+        n_steps = min(n_steps, len(masked_context_list))
+    if order is not None:
+        n_steps = min(n_steps, len(order))
+    if scores_at_pick is not None:
+        n_steps = min(n_steps, len(scores_at_pick))
+
+    masked_prompts = masked_prompts[:n_steps]
+    masked_stats = masked_stats[:n_steps]
+    if masked_context_list is not None:
+        masked_context_list = masked_context_list[:n_steps]
+    if order is not None:
+        order = order[:n_steps]
+    if scores_at_pick is not None:
+        scores_at_pick = scores_at_pick[:n_steps]
 
     flip_idx = _first_flip_idx(baseline_stats, list(masked_stats))
     idxs: List[int] = []
 
     if policy == "all":
-        idxs = list(range(len(masked_prompts)))
+        idxs = list(range(n_steps))
     else:
         if flip_idx is None:
-            idxs = [0] if len(masked_prompts) > 0 else []
+            idxs = [0] if n_steps > 0 else []
         else:
             lo = max(0, flip_idx - window)
-            hi = min(len(masked_prompts) - 1, flip_idx + window)
+            hi = min(n_steps - 1, flip_idx + window)
             idxs = sorted(set([0] + list(range(lo, hi + 1))))
 
     masked_entries = []
@@ -176,9 +580,9 @@ def dump_masked_prompts_json(
         ent = {"step": int(i + 1), "prompt": masked_prompts[i], "stats": masked_stats[i]}
         if masked_context_list is not None:
             ent["masked_context"] = masked_context_list[i]
-        if order is not None and i < len(order):
+        if order is not None:
             ent["newly_masked_base_pos"] = int(order[i])
-        if scores_at_pick is not None and i < len(scores_at_pick):
+        if scores_at_pick is not None:
             ent["score_at_pick"] = float(scores_at_pick[i])
         masked_entries.append(ent)
 
@@ -198,7 +602,7 @@ def dump_masked_prompts_json(
         },
         "integrity": {
             "baseline_prompt_sha1": _sha1(baseline_prompt),
-            "n_masked_total": int(len(masked_prompts)),
+            "n_masked_total": int(n_steps),
         },
     }
 
@@ -309,29 +713,54 @@ def mask_by_order(
 
     ordered_offsets = [ctx_rel_offsets[i] for i in order]
 
+    if stop_on_flip:
+        masked_prompts, masked_context_list, masked_stats, masked_logps, _stopped_early = _compute_probs_streaming_until_flip(
+            document=full_context,
+            query=query,
+            ordered_offsets=ordered_offsets,
+            change_template_contextCite=change_template_contextCite,
+            hf_model=hf_model,
+            hf_tok=hf_tok,
+            hf_device=hf_device,
+            true_variants=true_variants,
+            false_variants=false_variants,
+            compute_probs_file_name=compute_probs_file_name,
+            p_true_flipping=p_true_flipping,
+            save_logs=save_logs,
+        )
+    else:
+        masked_prompts, masked_context_list = create_masked_prompts_iterative(
+            full_context,
+            query,
+            ordered_offsets,
+            change_template_contextCite=change_template_contextCite,
+        )
 
-    masked_prompts, masked_context_list = create_masked_prompts_iterative(
-        full_context,
-        query,
-        ordered_offsets,
-        change_template_contextCite=change_template_contextCite,
-    )
+        masked_stats, masked_logps = compute_probs(
+            hf_model,
+            hf_tok,
+            masked_prompts,
+            hf_device,
+            None,
+            batch_size=2,
+            return_full_logp=True,
+            file_name=compute_probs_file_name,
+            detect_flip_to_true=p_true_flipping,
+            true_variants=true_variants,
+            false_variants=false_variants,
+            save_file=save_logs,
+            stop_on_flip=False,
+        )
+        # keep parallel arrays aligned if compute_probs stopped early on flip
+        effective_steps = len(masked_stats)
+        if effective_steps < len(masked_prompts):
+            masked_prompts = masked_prompts[:effective_steps]
+            masked_context_list = masked_context_list[:effective_steps]
 
-    masked_stats, masked_logps = compute_probs(
-        hf_model,
-        hf_tok,
-        masked_prompts,
-        hf_device,
-        None,
-        batch_size=8,
-        return_full_logp=True,
-        file_name=compute_probs_file_name,
-        detect_flip_to_true=p_true_flipping,
-        true_variants=true_variants,
-        false_variants=false_variants,
-        save_file=save_logs,
-        stop_on_flip=stop_on_flip,
-    )
+    effective_steps = len(masked_stats)
+    order = list(order)[:effective_steps]
+    if scores_vec is not None:
+        scores_vec = np.asarray(scores_vec, dtype=np.float32)
 
     if dump_json_path and save_logs:
         pick_scores = None if scores_vec is None else [float(scores_vec[i]) for i in order]
