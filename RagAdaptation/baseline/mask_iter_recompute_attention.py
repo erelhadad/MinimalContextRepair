@@ -37,6 +37,10 @@ from RagAdaptation.methods.common import (
     get_at2_token_scores,
     map_at2_scores_to_base_via_sources,
     mask_context_spans_same_length,
+    _rewrite_chunked_step_metadata,
+    _write_compute_probs_flip_log,
+    _infer_attention_model_type,
+    _project_qk_last_layer,
 )
 
 _HF_TOK = None
@@ -126,8 +130,16 @@ def _attention_scores_mapped_to_base(
     base_offsets: List[Tuple[int, int]],
 ) -> np.ndarray:
     """
-    Compute attention scores on the current masked prompt, then map to stable base_offsets.
-    Scoring: last-layer attention, averaged over heads, summed from query tokens -> context tokens.
+    Compute attention scores on the current masked prompt, then map to stable
+    base_offsets. Scoring stays the same:
+      - last layer
+      - average across heads
+      - question -> context block
+      - sum over question tokens
+
+    Implementation detail:
+      - do NOT use output_attentions=True
+      - reconstruct only the needed last-layer attention block from hidden states
     """
     full_prompt = prompt_template.format(context=masked_context, question=query)
 
@@ -163,33 +175,65 @@ def _attention_scores_mapped_to_base(
         out = hf_model(
             **enc,
             return_dict=True,
-            output_attentions=True,
-            output_hidden_states=False,
+            output_hidden_states=True,
+            output_attentions=False,
             use_cache=False,
         )
 
-    attn_layers = out.attentions
-    if attn_layers is None:
-        raise ValueError("No attentions returned (output_attentions=True required).")
+    hidden_states = out.hidden_states
+    if hidden_states is None:
+        raise ValueError("Model did not return hidden states.")
 
-    last = attn_layers[-1][0]   # [heads, seq, seq]
-    attn_avg = last.mean(dim=0) # [seq, seq]
+    model_type = _infer_attention_model_type(hf_model)
+    query_states, key_states, causal_mask, head_dim = _project_qk_last_layer(
+        hf_model,
+        hidden_states,
+        model_type=model_type,
+    )
 
-    q_idx = torch.tensor(q_token_indices, device=attn_avg.device, dtype=torch.long)
-    c_idx = torch.tensor(ctx_token_indices, device=attn_avg.device, dtype=torch.long)
+    q_start = q_token_indices[0]
+    q_end = q_token_indices[-1] + 1
 
-    q_to_c = attn_avg.index_select(0, q_idx).index_select(1, c_idx)  # [|Q|, |C|]
-    scores_ctx = q_to_c.sum(dim=0).detach().float().cpu().numpy()    # [|C|]
+    query_states = query_states[:, :, q_start:q_end, :]
+    causal_mask = causal_mask[:, :, q_start:q_end, :]
+
+    attn_scores = torch.matmul(
+        query_states, key_states.transpose(2, 3)
+    ) / np.sqrt(float(head_dim))
+    attn_scores = attn_scores + causal_mask
+    attn_weights = torch.softmax(attn_scores, dim=-1, dtype=torch.float32)
+
+    last_layer_q_to_all = attn_weights[0].mean(dim=0)  # [|Q|, seq]
+
+    c_idx = torch.tensor(
+        ctx_token_indices,
+        device=last_layer_q_to_all.device,
+        dtype=torch.long,
+    )
+    q_to_c = last_layer_q_to_all.index_select(1, c_idx)  # [|Q|, |C|]
+    scores_ctx = q_to_c.sum(dim=0).detach().float().cpu().numpy().astype(
+        np.float32, copy=False
+    )
 
     scores_base = _map_scores_by_char_overlap(base_offsets, ctx_rel_offsets, scores_ctx)
 
-    del out
+    del (
+        out,
+        hidden_states,
+        query_states,
+        key_states,
+        causal_mask,
+        attn_scores,
+        attn_weights,
+        last_layer_q_to_all,
+        q_to_c,
+        c_idx,
+        enc,
+    )
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
     return scores_base
-
-
 def _contextcite_scores_mapped_to_base(
     *,
     hf_model,
@@ -321,6 +365,63 @@ def _write_adaptive_log(
             f.write("\n")
 
 
+def _flush_recompute_prompt_chunk_until_flip(
+    *,
+    hf_model,
+    hf_tok,
+    hf_device,
+    prompt_chunk: List[str],
+    batch_size: int,
+    p_true_flipping: bool,
+    true_variants,
+    false_variants,
+    compute_probs_file_name: str,
+    step_offset: int,
+    masked_prompts_acc: List[str],
+    masked_stats_acc: List[dict],
+    masked_logps_acc: List[float],
+):
+    """
+    Score a chunk of already-created masked prompts and stop early if compute_probs
+    finds a flip.
+
+    This preserves the scoring semantics of the old implementation and only changes
+    prompt handling: we no longer need to materialize the full prompt trajectory
+    before scoring.
+    """
+    if not prompt_chunk:
+        return False, step_offset
+
+    chunk_stats, chunk_logps = compute_probs(
+        hf_model,
+        hf_tok,
+        prompt_chunk,
+        hf_device,
+        None,
+        batch_size=batch_size,
+        detect_flip_to_true=p_true_flipping,
+        true_variants=true_variants,
+        false_variants=false_variants,
+        masked_context_list=None,
+        return_full_logp=True,
+        file_name=compute_probs_file_name,
+        save_file=False,
+        stop_on_flip=True,
+    )
+
+    _rewrite_chunked_step_metadata(chunk_stats, step_offset=step_offset)
+
+    effective_steps = len(chunk_stats)
+    masked_prompts_acc.extend(prompt_chunk[:effective_steps])
+    masked_stats_acc.extend(chunk_stats)
+    if chunk_logps is not None:
+        masked_logps_acc.extend(chunk_logps[:effective_steps])
+
+    step_offset += effective_steps
+    stopped_early = effective_steps < len(prompt_chunk)
+    return stopped_early, step_offset
+
+
 def mask_by_order_recompute(
     *,
     full_context: str,
@@ -328,7 +429,7 @@ def mask_by_order_recompute(
     hf_model,
     hf_tok,
     hf_device,
-    max_steps: Optional[int] = 2000,
+    max_steps: Optional[int] = 5000,
     batch_size: int = 2,
     score_mode: str = "attention",
     compute_probs_file_name: str = "attention_recompute_output_compute_probs.txt",
@@ -377,6 +478,13 @@ def mask_by_order_recompute(
 
     masked_prompts: List[str] = []
     masked_context_list: List[str] = []
+
+    stream_chunk_size = 32
+    pending_prompts: List[str] = []
+    streamed_prompts: List[str] = []
+    streamed_stats: List[dict] = []
+    streamed_logps: List[float] = []
+    step_offset = 0
 
     keep_running = True
 
@@ -454,16 +562,37 @@ def mask_by_order_recompute(
             masked_spans.append(base_offsets[pick])
 
             new_context = mask_context_spans_same_length(full_context, masked_spans)
-            masked_context_list.append(new_context)
 
             if score_mode in ("context_cite", "at2"):
-                masked_prompts.append(
-                    prompt_template.format(context=new_context, query=query)
-                )
+                new_prompt = prompt_template.format(context=new_context, query=query)
             else:
-                masked_prompts.append(
-                    prompt_template.format(context=new_context, question=query)
-                )
+                new_prompt = prompt_template.format(context=new_context, question=query)
+
+            if stop_on_flip:
+                pending_prompts.append(new_prompt)
+                if len(pending_prompts) >= stream_chunk_size:
+                    stopped_early, step_offset = _flush_recompute_prompt_chunk_until_flip(
+                        hf_model=hf_model,
+                        hf_tok=hf_tok,
+                        hf_device=hf_device,
+                        prompt_chunk=pending_prompts,
+                        batch_size=batch_size,
+                        p_true_flipping=p_true_flipping,
+                        true_variants=true_variants,
+                        false_variants=false_variants,
+                        compute_probs_file_name=compute_probs_file_name,
+                        step_offset=step_offset,
+                        masked_prompts_acc=streamed_prompts,
+                        masked_stats_acc=streamed_stats,
+                        masked_logps_acc=streamed_logps,
+                    )
+                    pending_prompts = []
+                    if stopped_early:
+                        keep_running = False
+                        break
+            else:
+                masked_context_list.append(new_context)
+                masked_prompts.append(new_prompt)
 
         if len(order) > 0 and (len(order) == 1 or len(order) % 25 == 0):
             print(
@@ -473,25 +602,55 @@ def mask_by_order_recompute(
 
     os.makedirs(os.path.dirname(compute_probs_file_name) or ".", exist_ok=True)
 
-    if masked_prompts:
-        masked_stats, masked_logps = compute_probs(
-            hf_model,
-            hf_tok,
-            masked_prompts,
-            hf_device,
-            None,
-            batch_size=batch_size,
-            detect_flip_to_true=p_true_flipping,
-            true_variants=true_variants,
-            false_variants=false_variants,
-            masked_context_list=masked_context_list,
-            return_full_logp=True,
-            file_name=compute_probs_file_name,
-            save_file=save_logs,
-            stop_on_flip=stop_on_flip
-        )
+    if stop_on_flip:
+        if pending_prompts and keep_running:
+            _stopped_early, step_offset = _flush_recompute_prompt_chunk_until_flip(
+                hf_model=hf_model,
+                hf_tok=hf_tok,
+                hf_device=hf_device,
+                prompt_chunk=pending_prompts,
+                batch_size=batch_size,
+                p_true_flipping=p_true_flipping,
+                true_variants=true_variants,
+                false_variants=false_variants,
+                compute_probs_file_name=compute_probs_file_name,
+                step_offset=step_offset,
+                masked_prompts_acc=streamed_prompts,
+                masked_stats_acc=streamed_stats,
+                masked_logps_acc=streamed_logps,
+            )
+
+        masked_stats, masked_logps = streamed_stats, streamed_logps
+        effective_steps = len(masked_stats)
+        order = order[:effective_steps]
+        scores_at_pick = scores_at_pick[:effective_steps]
+
+        if save_logs:
+            _write_compute_probs_flip_log(
+                compute_probs_file_name,
+                masked_prompts=streamed_prompts,
+                masked_stats=masked_stats,
+            )
     else:
-        masked_stats, masked_logps = [], []
+        if masked_prompts:
+            masked_stats, masked_logps = compute_probs(
+                hf_model,
+                hf_tok,
+                masked_prompts,
+                hf_device,
+                None,
+                batch_size=batch_size,
+                detect_flip_to_true=p_true_flipping,
+                true_variants=true_variants,
+                false_variants=false_variants,
+                masked_context_list=masked_context_list,
+                return_full_logp=True,
+                file_name=compute_probs_file_name,
+                save_file=save_logs,
+                stop_on_flip=False
+            )
+        else:
+            masked_stats, masked_logps = [], []
 
     if save_logs and log_path is not None:
         os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
@@ -509,68 +668,3 @@ def mask_by_order_recompute(
     return masked_stats, masked_logps, order, scores_at_pick
 
 
-
-def main():
-    query = "Is being vegetarian considered healthy?"
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--query",
-        type=str,
-        default="Is sugar considered an addictive substance?",
-    )
-    parser.add_argument("--baseline", action="store_true")
-    parser.add_argument("--max_steps", type=int, default=2000)
-    parser.add_argument("--batch_size", type=int, default=2)
-    parser.add_argument("--score_mode", type=str, default="attention")
-    parser.add_argument("--document_histogram", action="store_true")
-    parser.add_argument("--out_dir", type=str, default="attention_recompute_results")
-    parser.add_argument("--doc_name", type=str, default="Is_sugar_addictive_text_only_no_header.pdf")
-    args = parser.parse_args()
-
-    doc_path = DATA_DIR / args.doc_name
-    if not doc_path.exists():
-        raise FileNotFoundError(f"Document not found at: {doc_path}")
-
-    docs = load_documents_any(doc_path)
-    full_context = combine_document_text(docs)
-
-    hf_model, hf_tok, hf_device = get_hf_scorer()
-
-    prompt_template = ChatPromptTemplate.from_template(TF_RAG_TEMPLATE)
-    baseline_prompt = prompt_template.format(context=full_context, question=query)
-
-    os.makedirs(args.out_dir, exist_ok=True)
-
-    print("Adaptive attention-guided masking (recompute scores each step)")
-    masked_stats, masked_logps, order, scores_at_pick = mask_by_order_recompute(
-        full_context=full_context,
-        query=query,
-        hf_model=hf_model,
-        hf_tok=hf_tok,
-        hf_device=hf_device,
-        max_steps=args.max_steps,
-        batch_size=args.batch_size,
-        score_mode=args.score_mode,
-        compute_probs_file_name=os.path.join(
-            args.out_dir,
-            f"{args.score_mode}_recompute_output_compute_probs.txt",
-        ),
-        log_path=os.path.join(
-            args.out_dir,
-            f"greedy_token_masking_{args.score_mode}_recompute.txt",
-        ),
-    )
-
-    if args.document_histogram:
-        create_p_true_function(
-            masked_logps,
-            out_dir=args.out_dir,
-            filename=f"{args.score_mode}_p_true_histogram.png",
-        )
-
-    print(f"[DONE] steps_run={len(order)} (requested max_steps={args.max_steps})")
-
-
-if __name__ == "__main__":
-    main()

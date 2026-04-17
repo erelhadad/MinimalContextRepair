@@ -63,7 +63,8 @@ def run_recompute_method(*,model_con:ModelConfig, out_dir: str, rec_method: str,
         est_path = AT2_ESTIMATOR_BY_MODEL.get(model_id)
         if est_path is None:
             raise ValueError(f"No AT2 estimator registered for model={model_id}")
-        hf_model_at2, hf_tok_at2, hf_device_at2 = get_hf_scorer_single_device(model_id=model_id, device="cuda:0")
+        #changed this
+        hf_model_at2, hf_tok_at2, hf_device_at2 = model_con.load()
         masked_stats, masked_logps, order, scores_at_pick = mask_by_order_recompute(
             full_context=full_context,
             query=query,

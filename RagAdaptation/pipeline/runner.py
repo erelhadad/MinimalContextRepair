@@ -1,14 +1,17 @@
 from __future__ import annotations
-
-import json
+import os
+os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 from datetime import datetime, timezone
+from typing import Any, Callable
+import gc
+import json
+import torch
 from pathlib import Path
-from typing import Any, Callable, Iterable
-
 from RagAdaptation.core.artifacts import create_run_root, example_dir, model_dir, write_example_inputs, write_manifest
 from RagAdaptation.core.documents import combine_document_text, load_documents_any
 from RagAdaptation.pipeline.config import PipelineConfig
 from RagAdaptation.prompts_format import normalize_true_false
+from RagAdaptation.core.models import cleanup_memory, unload_all_hf_models
 
 
 def load_items(path: str | Path):
@@ -25,19 +28,13 @@ def norm_expected(x):
         return "true" if x else "false"
     return normalize_true_false(str(x))
 
-import gc
-import json
-import torch
-from pathlib import Path
 
 def _is_cuda_oom(e: BaseException) -> bool:
     msg = str(e).lower()
     return isinstance(e, torch.OutOfMemoryError) or "cuda out of memory" in msg
 
-def _cleanup_after_oom():
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+def _cleanup_after_oom()-> None:
+    cleanup_memory()
 
 def build_manifest(config: PipelineConfig, items_count: int) -> dict[str, Any]:
     return {
@@ -69,7 +66,8 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
         if ex_i in set(config.skip_example_indices):
             continue
         if config.examples_range is not None:
-            if ex_i < config.examples_range[0] or ex_i > config.examples_range[1]:
+            lo, hi = config.examples_range
+            if ex_i < lo or ex_i > hi:
                 continue
 
         query = ex.get("query") or ex.get("question")
@@ -90,7 +88,6 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
 
         ex_dir = example_dir(run_root, ex_i)
         write_example_inputs(ex_dir, example_payload=ex, context_text=full_context)
-
 
         for model_id in config.models:
             model_info = ex.get("per_model", {}).get(model_id)
@@ -134,5 +131,6 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
                     print(f"[oom-skip] ex={ex_i} model={model_id}: {e}")
                     continue
                 raise
+
 
     return run_root

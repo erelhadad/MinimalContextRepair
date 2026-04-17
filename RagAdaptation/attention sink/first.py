@@ -531,44 +531,75 @@ def iter_examples(context_mode: str = "full", split: str = "validation"):
 # Example usage
 # -------------------------------------------------------------------------
 #
+# model_con = ModelConfig("microsoft/Phi-3-mini-4k-instruct")
+#
+# START_INDEX=88
+# for i, ex in enumerate(iter_examples(context_mode="full", split="validation")):
+#     if i < START_INDEX:
+#         continue
+#     result = inspect_attention(
+#          query=ex["question"],
+#          model_con=model_con,
+#          context=ex["context_text"],
+#          hotpot=False,
+#          #hotpot=True,
+#          #supporting_facts=ex["supporting_facts"],
+#         supporting_facts=None,
+#         masking_iteration=5,
+#     )
+#
+#     ques=ex["question"]
+#
+#
+#
+#     '''
+#     with open(f"output{ques}sp_regular.json", 'w') as json_file:
+#         json.dump(result["supporting_facts_regular"], json_file, indent=4)
+#     with open(f"output{ques}sp_recomp.json", 'w') as json_file:
+#         json.dump(result["supporting_facts_recompute"], json_file, indent=4)
+#
+#     '''
+#
+#     from pathlib import Path
+#     import re
+#
+#     out_dir = Path("attention_sink_outputs")
+#     out_dir.mkdir(exist_ok=True)
+#
+#     safe_ques = re.sub(r'[^A-Za-z0-9._ -]+', '_', ques)[:100]
+#     out_path = out_dir / f"output_{safe_ques}_mistral.json"
+#
+#     with open(out_path, 'w') as json_file:
+#         json.dump(result, json_file, indent=4)
+
+from datasets import load_dataset
+
 model_con = ModelConfig("microsoft/Phi-3-mini-4k-instruct")
+ds = load_dataset("google/boolq", "distractor", split="validation")
 
-START_INDEX=88
-for i, ex in enumerate(iter_examples(context_mode="full", split="validation")):
-    if i < START_INDEX:
-        continue
+for row in ds:
+    question = str(row["question"]).strip()
+    title = str(row.get("title") or "").strip()
+    passage = str(row["passage"]).strip()
+    context_text = passage if not title else f"{title}\n{passage}"
+
     result = inspect_attention(
-         query=ex["question"],
-         model_con=model_con,
-         context=ex["context_text"],
-         hotpot=True,
-         supporting_facts=ex["supporting_facts"],
-         masking_iteration=5,
+        query=question,
+        model_con=model_con,
+        context=context_text,
+        hotpot=False,
+        supporting_facts=None,
+        masking_iteration=5,
     )
-
-    ques=ex["question"]
-
-    
-    
-    '''
-    with open(f"output{ques}sp_regular.json", 'w') as json_file:
-        json.dump(result["supporting_facts_regular"], json_file, indent=4)
-    with open(f"output{ques}sp_recomp.json", 'w') as json_file:
-        json.dump(result["supporting_facts_recompute"], json_file, indent=4)
-    
-    '''
 
     from pathlib import Path
     import re
-
     out_dir = Path("attention_sink_outputs")
     out_dir.mkdir(exist_ok=True)
-
-    safe_ques = re.sub(r'[^A-Za-z0-9._ -]+', '_', ques)[:100]
-    out_path = out_dir / f"output_{safe_ques}_mistral.json"
+    model_id=model_con.model_id
+    safe_ques = re.sub(r'[^A-Za-z0-9._ -]+', '_', question)[:100]
+    out_path = out_dir / f"output_{safe_ques}_{model_id}.json"
 
     with open(out_path, 'w') as json_file:
-        json.dump(result, json_file, indent=4)    
-
-
+        json.dump(result, json_file, indent=4)
     

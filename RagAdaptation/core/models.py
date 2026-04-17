@@ -11,6 +11,11 @@ _HF_SINGLE_DEVICE_CACHE: dict[tuple[str, str], tuple[Any, Any, Any]] = {}
 import gc
 import torch
 
+def cleanup_memory() -> None:
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
 def unload_hf_model(model_id: str, device: str | None = None):
     global _HF_SCORER_CACHE, _HF_SINGLE_DEVICE_CACHE
 
@@ -25,9 +30,7 @@ def unload_hf_model(model_id: str, device: str | None = None):
             model, tok, dev = cached2
             del model, tok, dev
 
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    cleanup_memory()
 
 def _require_transformers():
     try:
@@ -37,6 +40,60 @@ def _require_transformers():
             "RagAdaptation.core.models requires the transformers package installed."
         ) from exc
     return AutoModelForCausalLM, AutoTokenizer
+
+def unload_hf_model(model_id: str, device: str | None = None) -> None:
+    """
+    Remove one model from the global caches.
+
+    If `device` is given, also remove the matching single-device cache entry.
+    """
+    global _HF_SCORER_CACHE, _HF_SINGLE_DEVICE_CACHE
+
+    cached = _HF_SCORER_CACHE.pop(model_id, None)
+    if cached is not None:
+        model, tok, dev = cached
+        del model, tok, dev
+
+    if device is not None:
+        cached2 = _HF_SINGLE_DEVICE_CACHE.pop((model_id, str(device)), None)
+        if cached2 is not None:
+            model, tok, dev = cached2
+            del model, tok, dev
+
+    cleanup_memory()
+
+
+def unload_all_hf_models(model_id: str | None = None) -> None:
+    """
+    Drop all cached copies for one model_id, or all cached models if model_id is None.
+    """
+    global _HF_SCORER_CACHE, _HF_SINGLE_DEVICE_CACHE
+
+    if model_id is None:
+        main_items = list(_HF_SCORER_CACHE.items())
+        single_items = list(_HF_SINGLE_DEVICE_CACHE.items())
+        _HF_SCORER_CACHE.clear()
+        _HF_SINGLE_DEVICE_CACHE.clear()
+    else:
+        main_items = []
+        cached = _HF_SCORER_CACHE.pop(model_id, None)
+        if cached is not None:
+            main_items.append((model_id, cached))
+
+        single_items = []
+        for key in list(_HF_SINGLE_DEVICE_CACHE.keys()):
+            if key[0] == model_id:
+                single_items.append((key, _HF_SINGLE_DEVICE_CACHE.pop(key)))
+
+    for _, triple in main_items:
+        model, tok, dev = triple
+        del model, tok, dev
+
+    for _, triple in single_items:
+        model, tok, dev = triple
+        del model, tok, dev
+
+    cleanup_memory()
 
 
 def get_hf_scorer(model_id: str = "mistralai/Mistral-7B-Instruct-v0.3"):
@@ -54,11 +111,17 @@ def get_hf_scorer(model_id: str = "mistralai/Mistral-7B-Instruct-v0.3"):
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
 
+    # model = AutoModelForCausalLM.from_pretrained(
+    #     model_id,
+    #     device_map="auto",
+    #     torch_dtype="auto",
+    #     output_attentions=True,
+    # ).eval()
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
         device_map="auto",
         torch_dtype="auto",
-        output_attentions=True,
+        low_cpu_mem_usage=True,
     ).eval()
 
     cached = (model, tok, model.device)
@@ -97,6 +160,8 @@ def get_hf_scorer_single_device(
         model_id,
         torch_dtype=torch_dtype,
         trust_remote_code=False,
+        #add that
+        low_cpu_mem_usage=True,
     ).to(device).eval()
 
     cached = (model, tok, model.device)
