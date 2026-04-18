@@ -28,8 +28,7 @@ def run_full_pipeline(*,model_id: str,
     recompute: Optional[List[str]] = None,
     skip_recompute: List[int]= None,
     save_logs: bool= True,
-    stop_on_flip: bool= False,
-                      ):
+    stop_on_flip: bool= False,):
 
     model_config = Model_Config.ModelConfig(model_id)
     os.makedirs(out_dir, exist_ok=True)
@@ -70,18 +69,24 @@ def run_full_pipeline(*,model_id: str,
 
     seeds = seeds or [0]
     recompute = recompute or []
+    import time
 
     for method_name in methods:
         if method_name == "baseline":
             continue
         try:
             if method_name == "attention":
-                    results["methods"]["attention"] = run_attention_method(model_con=model_config,out_dir=out_dir,
+                method_time= time.perf_counter()
+                #a dict
+                results["methods"]["attention"] = run_attention_method(model_con=model_config,out_dir=out_dir,
                         baseline_prompt=baseline_prompt,baseline_stats=baseline_stats,
                         full_context=full_context,query=query,
                         p_true_flipping=detect_flip_to_true,
                         dump_policy=dump_policy,dump_window=dump_window,save_logs=save_logs,
                         stop_on_flip=stop_on_flip,)
+                finished_time= time.perf_counter() - method_time
+                results["methods"]["attention"]["time"] = finished_time
+
 
             elif method_name == "random":
                 results["methods"]["random"] = run_random_method(
@@ -95,7 +100,9 @@ def run_full_pipeline(*,model_id: str,
                     stop_on_flip=stop_on_flip,
                 )
 
+
             elif method_name == "context_cite":
+                method_time= time.perf_counter()
                 results["methods"]["context_cite"] = run_context_cite_method(
                     model_con=model_config,
                     out_dir=out_dir,
@@ -106,7 +113,10 @@ def run_full_pipeline(*,model_id: str,
                     save_logs=save_logs,
                     stop_on_flip=stop_on_flip,
                 )
+                finished_time= time.perf_counter() - method_time
+                results["methods"]["context_cite"]["time"] = finished_time
             elif method_name == "at2":
+                method_time= time.perf_counter()
                 results["methods"]["at2"] = run_at2_method(
                     model_con=model_config,
                     out_dir=out_dir,
@@ -118,6 +128,8 @@ def run_full_pipeline(*,model_id: str,
                     dump_policy=dump_policy,
                     dump_window=dump_window,save_logs=save_logs,
                     stop_on_flip=stop_on_flip,)
+                finished_time = time.perf_counter() - method_time
+                results["methods"]["context_cite"]["time"] = finished_time
             else:
                 raise ValueError(f"Unknown method: {method_name}")
         except Exception as e:
@@ -131,6 +143,7 @@ def run_full_pipeline(*,model_id: str,
     if skip_recompute is not None and 1 in skip_recompute:
         for rec_method in recompute:
             try:
+                method_time= time.perf_counter()
                 result_name, payload = run_recompute_method(
                     model_con=model_config,
                     out_dir=out_dir,
@@ -141,6 +154,8 @@ def run_full_pipeline(*,model_id: str,
                     p_true_flipping=detect_flip_to_true,save_logs=save_logs,
                     stop_on_flip=stop_on_flip,
                 )
+                finished_time = time.perf_counter() - method_time
+                results["methods"][rec_method]["time"] = finished_time
                 results["methods"][result_name] = payload
             except Exception as e:
                 if rec_method == "at2":
@@ -152,6 +167,7 @@ def run_full_pipeline(*,model_id: str,
         for val in skip_recompute:
             for rec_method in recompute:
                 try:
+                    method_time= time.perf_counter()
                     result_name, payload = run_recompute_method(
                         model_con=model_config,
                         out_dir=out_dir,rec_method=rec_method,model_id=model_id,
@@ -161,6 +177,8 @@ def run_full_pipeline(*,model_id: str,
                         save_logs=save_logs,
                         stop_on_flip=stop_on_flip,
                     )
+                    finished_time = time.perf_counter() - method_time
+                    results["methods"][rec_method]["time"] = finished_time
                     results["methods"][f"{result_name}_SR{val}"] = payload
                 except Exception as e:
                     if rec_method == "at2":
