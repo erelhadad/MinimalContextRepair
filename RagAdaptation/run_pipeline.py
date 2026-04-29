@@ -30,7 +30,7 @@ def main():
     ap.add_argument("--skip_examples", nargs="*", type=int, default=[])
     ap.add_argument("--save_logs",  action="store_true")
     ap.add_argument("--stop_at_flip", action="store_true")
-    ap.add_argument("--examples_range", nargs=1, type=int,help="Range of examples to run")
+    ap.add_argument("--examples_range", nargs=2, type=int,help="Range of examples to run")
     args = ap.parse_args()
 
     config = PipelineConfig(

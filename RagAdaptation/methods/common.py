@@ -23,12 +23,14 @@ from RagAdaptation.core.prompting import ChatPromptTemplate
 from RagAdaptation.prompts_format import TF_RAG_TEMPLATE, TF_RAG_TEMPLATE_A2T
 
 
+
+
+
 def find_token_indices_by_substring(
     full_text: str,
     substring: str,
     offsets_mapping: Sequence[Tuple[int, int]],
-    start_search_at: int = 0,
-):
+    start_search_at: int = 0,):
     begin = full_text.find(substring, start_search_at)
     if begin < 0:
         raise ValueError(
@@ -393,6 +395,44 @@ def _first_flip_idx(
 def _sha1(s: str) -> str:
     return hashlib.sha1(s.encode("utf-8")).hexdigest()
 
+def _json_safe(x):
+    if isinstance(x, dict):
+        return {str(k): _json_safe(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [_json_safe(v) for v in x]
+    if isinstance(x, Path):
+        return str(x)
+    if isinstance(x, np.ndarray):
+        return x.tolist()
+    if isinstance(x, np.integer):
+        return int(x)
+    if isinstance(x, np.floating):
+        return float(x)
+    if torch.is_tensor(x):
+        return x.detach().cpu().tolist()
+    return x
+
+
+def _write_masking_checkpoint(path: Optional[str], payload: Dict[str, Any]) -> None:
+    """
+    Atomic lightweight checkpoint.
+    This does not resume automatically; it prevents losing progress on preemption.
+    """
+    if not path:
+        return
+
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+
+    payload = {
+        "created_at": datetime.datetime.utcnow().isoformat() + "Z",
+        **payload,
+    }
+
+    tmp_path = f"{path}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(_json_safe(payload), f, ensure_ascii=False, indent=2)
+
+    os.replace(tmp_path, path)
 
 def _rewrite_chunked_step_metadata(masked_stats: List[Dict[str, Any]], *, step_offset: int) -> None:
     """
@@ -448,20 +488,13 @@ def _write_compute_probs_flip_log(
 
 
 def _compute_probs_streaming_until_flip(
-    *,
-    document: str,
-    query: str,
-    ordered_offsets: List[Tuple[int, int]],
-    change_template_contextCite: bool,
-    hf_model,
-    hf_tok,
-    hf_device,
-    true_variants,
-    false_variants,
-    compute_probs_file_name: str,
-    p_true_flipping: bool,
-    save_logs: bool,
-    chunk_size: int = 32,
+    *,document: str,query: str,ordered_offsets: List[Tuple[int, int]],
+    change_template_contextCite: bool,hf_model,hf_tok,hf_device,
+    true_variants,false_variants,compute_probs_file_name: str,
+    p_true_flipping: bool,save_logs: bool,chunk_size: int = 32,
+    checkpoint_path: Optional[str] = None,
+    checkpoint_every: int = 32,
+    checkpoint_payload_base: Optional[Dict[str, Any]] = None,
 ):
     """
     Stream masked prompts chunk-by-chunk until compute_probs finds a flip.
@@ -480,13 +513,26 @@ def _compute_probs_streaming_until_flip(
     step_offset = 0
     stopped_early = False
 
+    def save_stream_checkpoint(status: str) -> None:
+        if not checkpoint_path:
+            return
+
+        base = dict(checkpoint_payload_base or {})
+        base.update({
+            "status": status,
+            "stage": "mask_by_order_streaming",
+            "steps_scored": int(step_offset),
+            "total_candidate_steps": int(len(ordered_offsets)),
+            "masked_stats": masked_stats_acc,
+            "masked_logps": masked_logps_acc,
+            "stopped_early": bool(stopped_early),
+        })
+        _write_masking_checkpoint(checkpoint_path, base)
+
     for prompt_chunk, context_chunk in iter_masked_prompts_iterative_chunks(
-        document,
-        query,
-        ordered_offsets,
-        change_template_contextCite=change_template_contextCite,
-        chunk_size=chunk_size,
-    ):
+        document,query,ordered_offsets,change_template_contextCite=change_template_contextCite,
+        chunk_size=chunk_size,):
+
         chunk_stats, chunk_logps = compute_probs(
             hf_model,
             hf_tok,
@@ -514,8 +560,15 @@ def _compute_probs_streaming_until_flip(
 
         step_offset += effective_steps
 
+        if checkpoint_path and (
+                step_offset % max(1, checkpoint_every) == 0
+                or effective_steps < len(prompt_chunk)
+        ):
+            save_stream_checkpoint("running")
+
         if effective_steps < len(prompt_chunk):
             stopped_early = True
+            save_stream_checkpoint("stopped_early")
             break
 
     if save_logs:
@@ -524,25 +577,18 @@ def _compute_probs_streaming_until_flip(
             masked_prompts=masked_prompts_acc,
             masked_stats=masked_stats_acc,
         )
-
+    save_stream_checkpoint("completed")
     return masked_prompts_acc, masked_contexts_acc, masked_stats_acc, masked_logps_acc, stopped_early
 
 
 
-def dump_masked_prompts_json(
-    out_path: str,
-    *,
-    query: str,
-    baseline_prompt: str,
-    baseline_stats: Dict[str, Any],
-    masked_prompts: Sequence[str],
-    masked_stats: Sequence[Dict[str, Any]],
+def dump_masked_prompts_json(out_path: str,*,query: str,baseline_prompt: str,
+    baseline_stats: Dict[str, Any],masked_prompts: Sequence[str],masked_stats: Sequence[Dict[str, Any]],
     masked_context_list: Optional[Sequence[str]] = None,
-    order: Optional[Sequence[int]] = None,
-    scores_at_pick: Optional[Sequence[float]] = None,
-    policy: str = "flip",
-    window: int = 1,
-) -> str:
+    order: Optional[Sequence[int]] = None,scores_at_pick: Optional[Sequence[float]] = None,
+    policy: str = "flip",window: int = 1,
+                             ) -> str:
+
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     n_steps = min(len(masked_prompts), len(masked_stats))
@@ -612,24 +658,17 @@ def dump_masked_prompts_json(
     return out_path
 
 
-def mask_by_order(
-    full_context: str,
-    query: str,
+def mask_by_order(full_context: str,query: str,
     model_con: model_config.ModelConfig = None,
-    *,
-    scores: Optional[Sequence[torch.Tensor]] = None,
-    rng: Optional[np.random.Generator] = None,
-    compute_probs_file_name: str = "output_compute_probs.txt",
-    p_true_flipping=False,
-    dump_json_path: Optional[str] = None,
-    dump_policy: str = "flip",
-    dump_window: int = 1,
+    *,scores: Optional[Sequence[torch.Tensor]] = None,
+    rng: Optional[np.random.Generator] = None,compute_probs_file_name: str = "output_compute_probs.txt",
+    p_true_flipping=False, dump_json_path: Optional[str] = None,
+    dump_policy: str = "flip",dump_window: int = 1,
     source_offsets: Optional[List[Tuple[int, int]]] = None,
-    force_class_prompt: Optional[bool] = None,
-    baseline_stats: Optional[Dict[str, Any]] = None,
-    stop_scores_relative: Optional[float] = 0,
-    save_logs:bool=True,
-    stop_on_flip:bool =False,
+    force_class_prompt: Optional[bool] = None,baseline_stats: Optional[Dict[str, Any]] = None,stop_scores_relative: Optional[float] = 0,
+    save_logs:bool=True, stop_on_flip:bool =False,
+    checkpoint_path: Optional[str] = None,
+    checkpoint_every: int = 32,
 ):
     hf_model, hf_tok, hf_device = model_con.load()
     true_variants = model_con.get_true_variants()
@@ -712,38 +751,53 @@ def mask_by_order(
         order = [i for i in order if scores_vec[i] >= threshold]
 
     ordered_offsets = [ctx_rel_offsets[i] for i in order]
+    order_list_all = [int(i) for i in list(order)]
+    pick_scores_all = None
+    if scores_vec is not None:
+        pick_scores_all = [float(scores_vec[i]) for i in order_list_all]
+
+    if checkpoint_path:
+        _write_masking_checkpoint(
+            checkpoint_path,
+            {
+                "status": "started",
+                "stage": "mask_by_order",
+                "query": query,
+                "p_true_flipping": bool(p_true_flipping),
+                "total_candidate_steps": int(len(order_list_all)),
+                "order": order_list_all,
+                "scores_at_pick": pick_scores_all,
+            },
+        )
 
     if stop_on_flip:
         masked_prompts, masked_context_list, masked_stats, masked_logps, _stopped_early = _compute_probs_streaming_until_flip(
-            document=full_context,
-            query=query,
+            document=full_context,query=query,
             ordered_offsets=ordered_offsets,
             change_template_contextCite=change_template_contextCite,
-            hf_model=hf_model,
-            hf_tok=hf_tok,
-            hf_device=hf_device,
-            true_variants=true_variants,
-            false_variants=false_variants,
+            hf_model=hf_model,hf_tok=hf_tok,hf_device=hf_device,
+            true_variants=true_variants,false_variants=false_variants,
             compute_probs_file_name=compute_probs_file_name,
-            p_true_flipping=p_true_flipping,
-            save_logs=save_logs,
-        )
-    else:
-        masked_prompts, masked_context_list = create_masked_prompts_iterative(
-            full_context,
-            query,
-            ordered_offsets,
-            change_template_contextCite=change_template_contextCite,
+            p_true_flipping=p_true_flipping,save_logs=save_logs,
+            checkpoint_path=checkpoint_path,
+            checkpoint_every=checkpoint_every,
+            checkpoint_payload_base={
+                "query": query,
+                "p_true_flipping": bool(p_true_flipping),
+                "order": order_list_all,
+                "scores_at_pick": pick_scores_all,
+            },
         )
 
+    else:
+        masked_prompts, masked_context_list = create_masked_prompts_iterative(
+            full_context,query,ordered_offsets,
+            change_template_contextCite=change_template_contextCite,)
+
         masked_stats, masked_logps = compute_probs(
-            hf_model,
-            hf_tok,
-            masked_prompts,
-            hf_device,
+            hf_model,hf_tok,masked_prompts,hf_device,
             None,
-            batch_size=2,
-            return_full_logp=True,
+            batch_size=2,return_full_logp=True,
             file_name=compute_probs_file_name,
             detect_flip_to_true=p_true_flipping,
             true_variants=true_variants,
@@ -768,28 +822,38 @@ def mask_by_order(
             baseline_stats = compute_probs(
                 hf_model,
                 hf_tok,
-                [full_prompt],
-                hf_device,
+                [full_prompt],hf_device,
                 expected_result=None,
-                batch_size=1,
-                return_full_logp=True,
+                batch_size=1,return_full_logp=True,
                 file_name=compute_probs_file_name + ".baseline_tmp",
                 detect_flip_to_true=p_true_flipping,
-                true_variants=true_variants,
-                false_variants=false_variants,
-            )[0][0]
-        dump_masked_prompts_json(
-            dump_json_path,
-            query=query,
-            baseline_prompt=full_prompt,
-            baseline_stats=baseline_stats,
+                true_variants=true_variants,false_variants=false_variants,)[0][0]
+
+        dump_masked_prompts_json(dump_json_path,query=query,
+            baseline_prompt=full_prompt,baseline_stats=baseline_stats,
             masked_prompts=masked_prompts,
-            masked_stats=masked_stats,
-            masked_context_list=masked_context_list,
-            order=order,
-            scores_at_pick=pick_scores,
-            policy=dump_policy,
-            window=dump_window,
+            masked_stats=masked_stats,masked_context_list=masked_context_list,
+            order=order,scores_at_pick=pick_scores,policy=dump_policy,window=dump_window,
+        )
+
+    if checkpoint_path:
+        final_pick_scores = None
+        if scores_vec is not None:
+            final_pick_scores = [float(scores_vec[i]) for i in order]
+
+        _write_masking_checkpoint(
+            checkpoint_path,
+            {
+                "status": "completed",
+                "stage": "mask_by_order",
+                "query": query,
+                "p_true_flipping": bool(p_true_flipping),
+                "steps_scored": int(len(masked_stats)),
+                "order": [int(i) for i in order],
+                "scores_at_pick": final_pick_scores,
+                "masked_stats": masked_stats,
+                "masked_logps": masked_logps,
+            },
         )
 
     return masked_stats, masked_logps
@@ -1021,13 +1085,40 @@ def map_at2_scores_to_base_via_sources(
     return out
 
 
+def _pick_at2_feature_device(model) -> torch.device:
+    """
+    For a sharded HF model (device_map=...), AT2 features usually come out on the
+    last CUDA shard. For a single-device model, just use the model's own device.
+    """
+    # HF sharded / accelerate-dispatched model
+    device_map = getattr(model, "hf_device_map", None)
+    if isinstance(device_map, dict) and device_map:
+        cuda_ids = []
+        for dev in device_map.values():
+            if isinstance(dev, str) and dev.startswith("cuda:"):
+                try:
+                    cuda_ids.append(int(dev.split(":")[1]))
+                except Exception:
+                    pass
+        if cuda_ids:
+            return torch.device(f"cuda:{max(cuda_ids)}")
+
+    # fallback: normal single-device model
+    try:
+        return next(model.parameters()).device
+    except Exception:
+        return torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 
 def get_at2_token_scores(
-    *,full_context: str,
-    query: str,hf_model,hf_tok,
+    *,
+    full_context: str,
+    query: str,
+    hf_model,
+    hf_tok,
     score_estimator_path: str | Path,
-    generate_kwargs: dict,):
-
+    generate_kwargs: dict,
+):
     from at2.tasks import SimpleContextAttributionTask
     from at2 import AT2Attributor
 
@@ -1042,6 +1133,15 @@ def get_at2_token_scores(
 
     score_estimator_path = Path(score_estimator_path)
     attributor = AT2Attributor.from_path(task, score_estimator_path)
+
+    # ---- NEW: align estimator device with the device used by model features ----
+    target_device = _pick_at2_feature_device(hf_model)
+
+    for attr_name in ("score_estimator", "estimator", "_score_estimator"):
+        mod = getattr(attributor, attr_name, None)
+        if isinstance(mod, torch.nn.Module):
+            mod.to(target_device)
+            mod.eval()
 
     gen = task.generation
     start, end = 0, len(gen)

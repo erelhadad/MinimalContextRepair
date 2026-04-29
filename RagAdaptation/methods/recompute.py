@@ -9,7 +9,7 @@ from RagAdaptation.core.model_config import ModelConfig
 def run_recompute_method(*,model_con:ModelConfig, out_dir: str, rec_method: str, model_id: str, full_context: str, query: str,p_true_flipping: bool,skip_recompute=1,
                          save_logs:bool=True,stop_on_flip:bool=True,):
     from RagAdaptation.baseline.mask_iter_recompute_attention import mask_by_order_recompute
-    from RagAdaptation.core.models import get_hf_scorer_single_device
+    # from RagAdaptation.core.models import get_hf_scorer_single_device
 
     hf_model, hf_tok, hf_device= model_con.load()
     true_variants, false_variants= model_con.get_true_variants(), model_con.get_false_variants()
@@ -30,10 +30,37 @@ def run_recompute_method(*,model_con:ModelConfig, out_dir: str, rec_method: str,
             masking_iteration=skip_recompute,
             save_logs=save_logs,
             stop_on_flip=stop_on_flip,
+            checkpoint_path=str(method_dir(out_dir, method_name) / f"SR{skip_recompute}_checkpoint.json"),
+            checkpoint_every=25,
         )
         if save_logs:
             create_p_true_function(masked_logps, out_dir=str(plots_dir(out_dir)), filename=f"recompute_attention_p_true_{skip_recompute}.png")
         return method_name, {"masked_stats": masked_stats, "masked_logps": masked_logps, "order": order, "scores_at_pick": scores_at_pick}
+
+    if rec_method == "attention_flow":
+        method_name = "recompute_attention_flow"
+        masked_stats, masked_logps, order, scores_at_pick = mask_by_order_recompute(
+            full_context=full_context,
+            query=query,
+            hf_model=hf_model,
+            hf_tok=hf_tok,
+            hf_device=hf_device,
+            batch_size=2,score_mode="attention_flow",
+            compute_probs_file_name=str(method_dir(out_dir, method_name) /  f"compute_probs_{skip_recompute}.txt"),
+            log_path=str(method_dir(out_dir, method_name) / f"SR{skip_recompute}log.txt"),
+            p_true_flipping=p_true_flipping,
+            true_variants=true_variants,
+            false_variants=false_variants,
+            masking_iteration=skip_recompute,
+            save_logs=save_logs,
+            stop_on_flip=stop_on_flip,
+            checkpoint_path=str(method_dir(out_dir, method_name) / f"SR{skip_recompute}_checkpoint.json"),
+            checkpoint_every=25,
+        )
+        if save_logs:
+            create_p_true_function(masked_logps, out_dir=str(plots_dir(out_dir)), filename=f"recompute_attention_flow_p_true_{skip_recompute}.png")
+        return method_name, {"masked_stats": masked_stats, "masked_logps": masked_logps, "order": order, "scores_at_pick": scores_at_pick}
+
 
     if rec_method == "context_cite":
         method_name = "recompute_context_cite"
@@ -53,6 +80,8 @@ def run_recompute_method(*,model_con:ModelConfig, out_dir: str, rec_method: str,
             masking_iteration=skip_recompute
             , save_logs=save_logs,
             stop_on_flip=stop_on_flip,
+            checkpoint_path=str(method_dir(out_dir, method_name) / f"SR{skip_recompute}_checkpoint.json"),
+            checkpoint_every=25,
         )
         if save_logs:
             create_p_true_function(masked_logps, out_dir=str(plots_dir(out_dir)), filename=f"recompute_context_cite_p_true_{skip_recompute}.png")
@@ -83,7 +112,11 @@ def run_recompute_method(*,model_con:ModelConfig, out_dir: str, rec_method: str,
             masking_iteration=skip_recompute,
             save_logs=save_logs,
             stop_on_flip=stop_on_flip,
+            checkpoint_path=str(method_dir(out_dir, method_name) / f"SR{skip_recompute}_checkpoint.json"),
+            checkpoint_every=25,
         )
+
+
         if save_logs:
             create_p_true_function(masked_logps, out_dir=str(plots_dir(out_dir)), filename=f"recompute_at2_p_true_{skip_recompute}.png")
         return method_name, {"masked_stats": masked_stats, "masked_logps": masked_logps, "order": order, "scores_at_pick": scores_at_pick, "estimator": str(est_path)}

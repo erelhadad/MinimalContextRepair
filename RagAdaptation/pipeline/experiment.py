@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from datetime import datetime
 import os
 from typing import List, Optional
 
@@ -10,7 +10,8 @@ from RagAdaptation.core.prompting import ChatPromptTemplate
 from RagAdaptation.methods import (
     run_attention_method,run_at2_method,
     run_context_cite_method,
-    run_random_method,run_recompute_method,)
+    run_random_method,run_recompute_method,
+    run_attention_flow_method)
 
 import RagAdaptation.core.model_config as Model_Config
 from RagAdaptation.prompts_format import TF_RAG_TEMPLATE
@@ -67,6 +68,26 @@ def run_full_pipeline(*,model_id: str,
         "methods": {},
     }
 
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    method_tag = "_".join(methods) if methods else "none"
+    rec_tag = "_".join(recompute or []) if recompute else "none"
+
+    out_path = os.path.join(
+        out_dir,
+        f"pipeline_result_methods_{method_tag}_recompute_{rec_tag}_{stamp}.json"
+    )
+
+    partial_path = os.path.join(
+        out_dir,
+        f"pipeline_result_methods_{method_tag}_recompute_{rec_tag}_{stamp}.partial.json"
+    )
+
+    def save_partial():
+        write_json(partial_path, results)
+
+    save_partial()
+
     seeds = seeds or [0]
     recompute = recompute or []
     import time
@@ -86,6 +107,22 @@ def run_full_pipeline(*,model_id: str,
                         stop_on_flip=stop_on_flip,)
                 finished_time= time.perf_counter() - method_time
                 results["methods"]["attention"]["time"] = finished_time
+                save_partial()
+
+            elif method_name=="attention_flow":
+                method_time = time.perf_counter()
+                # a dict
+                results["methods"]["attention_flow"] = run_attention_flow_method(model_con=model_config, out_dir=out_dir,
+                                                                       baseline_stats=baseline_stats,
+                                                                       full_context=full_context, query=query,
+                                                                       p_true_flipping=detect_flip_to_true,
+                                                                       dump_policy=dump_policy, dump_window=dump_window,
+                                                                       save_logs=save_logs,
+                                                                       stop_on_flip=stop_on_flip, )
+                finished_time = time.perf_counter() - method_time
+                results["methods"]["attention_flow"]["time"] = finished_time
+                save_partial()
+
 
 
             elif method_name == "random":
@@ -115,6 +152,8 @@ def run_full_pipeline(*,model_id: str,
                 )
                 finished_time= time.perf_counter() - method_time
                 results["methods"]["context_cite"]["time"] = finished_time
+                save_partial()
+            
             elif method_name == "at2":
                 method_time= time.perf_counter()
                 results["methods"]["at2"] = run_at2_method(
@@ -129,7 +168,8 @@ def run_full_pipeline(*,model_id: str,
                     dump_window=dump_window,save_logs=save_logs,
                     stop_on_flip=stop_on_flip,)
                 finished_time = time.perf_counter() - method_time
-                results["methods"]["context_cite"]["time"] = finished_time
+                results["methods"]["at2"]["time"] = finished_time
+                save_partial()
             else:
                 raise ValueError(f"Unknown method: {method_name}")
         except Exception as e:
@@ -138,6 +178,7 @@ def run_full_pipeline(*,model_id: str,
                 "error_type": type(e).__name__,
                 "error": str(e),
             }
+            save_partial()
 
 
     if skip_recompute is not None and 1 in skip_recompute:
@@ -155,13 +196,17 @@ def run_full_pipeline(*,model_id: str,
                     stop_on_flip=stop_on_flip,
                 )
                 finished_time = time.perf_counter() - method_time
-                results["methods"][rec_method]["time"] = finished_time
                 results["methods"][result_name] = payload
+                results["methods"][result_name]["time"] = finished_time
+                save_partial()
+
             except Exception as e:
                 if rec_method == "at2":
                     results["methods"]["recompute_at2"] = {"error": str(e), "status": "failed"}
                 else:
+                    save_partial()
                     raise
+
 
     elif skip_recompute is not None:
         for val in skip_recompute:
@@ -178,19 +223,19 @@ def run_full_pipeline(*,model_id: str,
                         stop_on_flip=stop_on_flip,
                     )
                     finished_time = time.perf_counter() - method_time
-                    results["methods"][rec_method]["time"] = finished_time
                     results["methods"][f"{result_name}_SR{val}"] = payload
+                    results["methods"][f"{result_name}_SR{val}"]["time"] = finished_time
+                    save_partial()
+
                 except Exception as e:
                     if rec_method == "at2":
                         results["methods"]["recompute_at2"] = {"error": str(e), "status": "failed"}
                     else:
+                        save_partial()
                         raise
 
-    from datetime import datetime
 
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    method_tag = "_".join(methods) if methods else "none"
-    rec_tag = "_".join(recompute) if recompute else "none"
+
 
     out_path = os.path.join(
         out_dir,
@@ -198,6 +243,12 @@ def run_full_pipeline(*,model_id: str,
     )
     print(f"[done] saved {out_path}")
     write_json(out_path, results)
+    try:
+        os.remove(partial_path)
+    except FileNotFoundError:
+        pass
+
+    print(f"[done] saved {out_path}")
     return out_path
 
 

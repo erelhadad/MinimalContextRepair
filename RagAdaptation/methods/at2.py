@@ -12,6 +12,23 @@ from RagAdaptation.methods.common import (
     mask_by_order,
     map_at2_scores_to_base_via_sources,
 )
+'''
+newton
+AT2_ESTIMATOR_BY_MODEL = {
+    "mistralai/Mistral-7B-Instruct-v0.3": Path(
+        "/home/erel.hadad/artifacts/at2_estimators/mistralai_Mistral-7B-Instruct-v0.3_databricks_databricks-dolly-15k_n1000_seed42_srcToken/estimators/default/score_estimator.pt"
+    ),
+    "microsoft/Phi-3-mini-4k-instruct": Path(
+        "/home/erel.hadad/artifacts/at2_estimators/microsoft_Phi-3-mini-4k-instruct_databricks_databricks-dolly-15k_n1000_seed42_srcToken/estimators/default/score_estimator.pt"
+    ),
+    "Qwen/Qwen3-4B-Instruct-2507":
+    Path(
+    "/home/erel.hadad/artifacts/at2_estimators/Qwen_Qwen3-4B-Instruct-2507_databricks_databricks-dolly-15k_n1000_seed42_srcToken/estimators/default/score_estimator.pt"   
+    ),
+}
+
+
+'''
 
 AT2_ESTIMATOR_BY_MODEL = {
     "mistralai/Mistral-7B-Instruct-v0.3": Path(
@@ -22,7 +39,7 @@ AT2_ESTIMATOR_BY_MODEL = {
     ),
     "Qwen/Qwen3-4B-Instruct-2507":
     Path(
-        "/data/home/erel.hadad/RAG_EXP/outputs/microsoft_Phi-3-mini-4k-instruct_databricks_databricks-dolly-15k_n1000_seed42_srcToken/estimators/default/score_estimator.pt"
+        "/data/home/erel.hadad/MinimalContextRepair/RagAdaptation/Qwen_Qwen3-4B-Instruct-2507_databricks_databricks-dolly-15k_n1000_seed42_srcToken/estimators/default/score_estimator.pt"
     ),
 }
 

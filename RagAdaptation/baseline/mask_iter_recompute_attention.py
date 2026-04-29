@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import os
 import sys
-import argparse
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
-
+from RagAdaptation.methods.attention_flow import _get_augmented_attention_mats_auto, _build_sparse_flow_graph
+import networkx as nx
 import matplotlib
 matplotlib.use("Agg")
 import torch
@@ -24,14 +24,10 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from RagAdaptation.compute_probs_updated import compute_probs
-from RagAdaptation.core.documents import combine_document_text, load_documents_any
-from RagAdaptation.core.paths import DATA_DIR
-from RagAdaptation.core.plotting import create_p_true_function
 from RagAdaptation.prompts_format import TF_RAG_TEMPLATE, TF_RAG_TEMPLATE_A2T
 from RagAdaptation.baseline.bruteforce_common import tokenize_context_with_offsets
 from RagAdaptation.core.prompting import ChatPromptTemplate
 from RagAdaptation.baseline.partitioner import TokenContextPartitioner
-from RagAdaptation.core.models import get_hf_scorer
 
 from RagAdaptation.methods.common import (
     get_at2_token_scores,
@@ -39,6 +35,7 @@ from RagAdaptation.methods.common import (
     mask_context_spans_same_length,
     _rewrite_chunked_step_metadata,
     _write_compute_probs_flip_log,
+    _write_masking_checkpoint,
     _infer_attention_model_type,
     _project_qk_last_layer,
 )
@@ -421,29 +418,104 @@ def _flush_recompute_prompt_chunk_until_flip(
     stopped_early = effective_steps < len(prompt_chunk)
     return stopped_early, step_offset
 
-
-def mask_by_order_recompute(
+def _attention_flow_scores_mapped_to_base(
     *,
-    full_context: str,
-    query: str,
     hf_model,
     hf_tok,
     hf_device,
-    max_steps: Optional[int] = 5000,
-    batch_size: int = 2,
-    score_mode: str = "attention",
+    prompt_template: ChatPromptTemplate,
+    masked_context: str,
+    query: str,
+    base_offsets: List[Tuple[int, int]],
+    topk_per_row: int = 8,
+    seq_len_limit: int = 384,
+) -> np.ndarray:
+    """
+    Recompute attention-flow scores on the CURRENT masked prompt,
+    then map them back to the stable base_offsets.
+    """
+    full_prompt = prompt_template.format(context=masked_context, question=query)
+
+    enc_full = hf_tok(
+        full_prompt,
+        add_special_tokens=False,
+        return_offsets_mapping=True,
+        truncation=False,
+        padding=False,
+    )
+    offsets_full = enc_full["offset_mapping"]
+    if hasattr(offsets_full, "tolist"):
+        offsets_full = offsets_full.tolist()
+
+    ctx_token_indices, ctx_rel_offsets, after_ctx = _find_token_indices_by_substring(
+        full_prompt, masked_context, offsets_full, start_search_at=0
+    )
+    q_token_indices, _, _ = _find_token_indices_by_substring(
+        full_prompt, query, offsets_full, start_search_at=after_ctx
+    )
+
+    enc = hf_tok(
+        full_prompt,
+        add_special_tokens=False,
+        return_tensors="pt",
+        truncation=False,
+        padding=False,
+    )
+    enc = {k: v.to(hf_device) for k, v in enc.items()}
+
+    # same backend logic you used for the new attention_flow method:
+    mats, _attn_mode = _get_augmented_attention_mats_auto(
+        hf_model=hf_model,
+        hf_tok=hf_tok,
+        hf_device=hf_device,
+        full_prompt=full_prompt,
+    )
+
+    seq_len = mats[0].shape[0]
+    if nx is None or seq_len > seq_len_limit:
+        # same fallback behavior as your method:
+        joint = mats[0]
+        for l in range(1, len(mats)):
+            joint = mats[l] @ joint
+
+        q_scores = joint[np.asarray(q_token_indices, dtype=np.int64)]
+        scores_ctx = q_scores[:, np.asarray(ctx_token_indices, dtype=np.int64)].mean(axis=0)
+    else:
+        G = _build_sparse_flow_graph(
+            mats,
+            source_nodes=[int(q) for q in q_token_indices],
+            topk_per_row=topk_per_row,
+        )
+
+        super_source = ("src", -1)
+        scores_ctx = np.zeros(len(ctx_token_indices), dtype=np.float32)
+
+        for out_i, ctx_tok in enumerate(ctx_token_indices):
+            sink = (-1, int(ctx_tok))
+            H = G.copy()
+            super_sink = ("sink", -1)
+            H.add_edge(sink, super_sink, capacity=1.0)
+            try:
+                flow_val, _ = nx.maximum_flow(H, super_source, super_sink)
+            except Exception:
+                flow_val = 0.0
+            scores_ctx[out_i] = float(flow_val)
+
+    scores_base = _map_scores_by_char_overlap(base_offsets, ctx_rel_offsets, scores_ctx)
+    return scores_base.astype(np.float32, copy=False)
+
+def mask_by_order_recompute(
+    *,full_context: str,query: str,
+    hf_model,hf_tok,hf_device,max_steps: Optional[int] = 5000,
+    batch_size: int = 2,score_mode: str = "attention",
     compute_probs_file_name: str = "attention_recompute_output_compute_probs.txt",
     log_path: Optional[str] = "greedy_token_masking_attention_recompute.txt",
-    score_estimator_path=None,
-    generate_kwargs=None,
-    p_true_flipping: bool = False,
-    true_variants=None,
-    false_variants=None,
-    masking_iteration=1,
+    score_estimator_path=None,generate_kwargs=None,p_true_flipping: bool = False,
+    true_variants=None,false_variants=None,masking_iteration=1,
     stop_scores_abs: Optional[float] = None,
-    save_logs:bool=True,
-    stop_on_flip:bool=False
-
+    save_logs:bool=True,stop_on_flip:bool=False,
+    checkpoint_path: Optional[str] = None,
+    checkpoint_every: int = 25,
 ):
     """
     Adaptive greedy masking:
@@ -488,6 +560,26 @@ def mask_by_order_recompute(
 
     keep_running = True
 
+    def save_recompute_checkpoint(status: str, stage: str) -> None:
+        if not checkpoint_path:
+            return
+
+        _write_masking_checkpoint(checkpoint_path,
+            {"status": status,"stage": stage,"score_mode": score_mode,
+                "query": query,"p_true_flipping": bool(p_true_flipping),
+                "masking_iteration": int(masking_iteration),
+                "max_steps": int(max_steps),"num_base_tokens": int(n),"steps_selected": int(len(order)),
+                "steps_scored": int(len(streamed_stats) if stop_on_flip else 0),
+                "pending_prompts": int(len(pending_prompts)) if stop_on_flip else 0,
+                "order": [int(x) for x in order],
+                "scores_at_pick": [float(x) for x in scores_at_pick],
+                "masked_stats": streamed_stats if stop_on_flip else [],
+                "masked_logps": streamed_logps if stop_on_flip else [],
+            },
+        )
+
+    save_recompute_checkpoint("started", "recompute_start")
+
     while len(order) < max_steps and keep_running:
         cur_context = mask_context_spans_same_length(full_context, masked_spans)
 
@@ -501,6 +593,17 @@ def mask_by_order_recompute(
                 query=query,
                 base_offsets=base_offsets,
             )
+        elif score_mode=="attention_flow":
+            scores_base = _attention_flow_scores_mapped_to_base(
+                hf_model=hf_model,
+                hf_tok=hf_tok,
+                hf_device=hf_device,
+                prompt_template=prompt_template,
+                masked_context=cur_context,
+                query=query,
+                base_offsets=base_offsets,
+            )
+
         elif score_mode == "context_cite":
             scores_base = _contextcite_scores_mapped_to_base(
                 hf_model=hf_model,
@@ -587,6 +690,12 @@ def mask_by_order_recompute(
                         masked_logps_acc=streamed_logps,
                     )
                     pending_prompts = []
+
+                    save_recompute_checkpoint(
+                        "stopped_early" if stopped_early else "running",
+                        "recompute_scored_chunk",
+                    )
+
                     if stopped_early:
                         keep_running = False
                         break
@@ -599,6 +708,8 @@ def mask_by_order_recompute(
                 f"[adaptive] masked={len(order)}/{max_steps} "
                 f"last_pick={order[-1]} last_score={scores_at_pick[-1]:.6f}"
             )
+            if checkpoint_path and len(order) % max(1, checkpoint_every) == 0:
+                save_recompute_checkpoint("running", "recompute_order_progress")
 
     os.makedirs(os.path.dirname(compute_probs_file_name) or ".", exist_ok=True)
 
@@ -663,6 +774,27 @@ def mask_by_order_recompute(
             order=order,
             scores_at_pick=scores_at_pick,
             masked_stats=masked_stats,
+        )
+
+    if checkpoint_path:
+        _write_masking_checkpoint(
+            checkpoint_path,
+            {
+                "status": "completed",
+                "stage": "recompute_completed",
+                "score_mode": score_mode,
+                "query": query,
+                "p_true_flipping": bool(p_true_flipping),
+                "masking_iteration": int(masking_iteration),
+                "max_steps": int(max_steps),
+                "num_base_tokens": int(n),
+                "steps_selected": int(len(order)),
+                "steps_scored": int(len(masked_stats)),
+                "order": [int(x) for x in order],
+                "scores_at_pick": [float(x) for x in scores_at_pick],
+                "masked_stats": masked_stats,
+                "masked_logps": masked_logps,
+            },
         )
 
     return masked_stats, masked_logps, order, scores_at_pick
