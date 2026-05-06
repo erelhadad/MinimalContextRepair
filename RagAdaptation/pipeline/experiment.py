@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 from datetime import datetime
 import os
@@ -5,21 +6,26 @@ from typing import List, Optional
 
 from RagAdaptation.compute_probs_updated import compute_probs
 from RagAdaptation.core.artifacts import method_dir, write_json
-from RagAdaptation.core.models import get_hf_scorer
-from RagAdaptation.core.prompting import ChatPromptTemplate
 from RagAdaptation.methods import (
-    run_attention_method,run_at2_method,
+    run_attention_method,
+    run_at2_method,
     run_context_cite_method,
-    run_random_method,run_recompute_method,
-    run_attention_flow_method)
+    run_random_method,
+    run_recompute_method,
+    run_attention_flow_method,
+    run_attention_ptrue_tie_method,
+    run_context_cite_ptrue_tie_method,
+    run_at2_ptrue_tie_method,
+    run_attention_eps_recompute_method,
+    run_context_cite_eps_recompute_method,
+    run_at2_eps_recompute_method,
+)
 
 import RagAdaptation.core.model_config as Model_Config
-from RagAdaptation.prompts_format import TF_RAG_TEMPLATE
 
 
-
-def run_full_pipeline(*,model_id: str,
-    query: str,full_context: str,
+def run_full_pipeline(*, model_id: str,
+    query: str, full_context: str,
     methods: List[str],
     seeds: Optional[List[int]] = None,
     out_dir: str = "runs",
@@ -27,17 +33,17 @@ def run_full_pipeline(*,model_id: str,
     dump_policy: str = "flip",
     dump_window: int = 1,
     recompute: Optional[List[str]] = None,
-    skip_recompute: List[int]= None,
-    save_logs: bool= True,
-    stop_on_flip: bool= False,):
+    skip_recompute: List[int] = None,
+    save_logs: bool = True,
+    stop_on_flip: bool = False,
+):
 
     model_config = Model_Config.ModelConfig(model_id)
     os.makedirs(out_dir, exist_ok=True)
 
     hf_model, hf_tok, hf_device = model_config.load()
     true_variants, false_variants = model_config.true_variants, model_config.false_variants
-    prompt_template = model_config.get_prompt_template()
-    baseline_prompt =  model_config.format_prompt(
+    baseline_prompt = model_config.format_prompt(
         question=query,
         context=full_context,
         context_cite_at2_formating=False,
@@ -45,7 +51,7 @@ def run_full_pipeline(*,model_id: str,
 
     baseline_dir = method_dir(out_dir, "baseline")
     baseline_stats_list, _ = compute_probs(
-        hf_model,hf_tok,
+        hf_model, hf_tok,
         [baseline_prompt],
         hf_device,
         None,
@@ -68,19 +74,12 @@ def run_full_pipeline(*,model_id: str,
         "methods": {},
     }
 
-
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     method_tag = "_".join(methods) if methods else "none"
     rec_tag = "_".join(recompute or []) if recompute else "none"
-
-    out_path = os.path.join(
-        out_dir,
-        f"pipeline_result_methods_{method_tag}_recompute_{rec_tag}_{stamp}.json"
-    )
-
     partial_path = os.path.join(
         out_dir,
-        f"pipeline_result_methods_{method_tag}_recompute_{rec_tag}_{stamp}.partial.json"
+        f"pipeline_result_methods_{method_tag}_recompute_{rec_tag}_{stamp}.partial.json",
     )
 
     def save_partial():
@@ -97,65 +96,75 @@ def run_full_pipeline(*,model_id: str,
             continue
         try:
             if method_name == "attention":
-                method_time= time.perf_counter()
-                #a dict
-                results["methods"]["attention"] = run_attention_method(model_con=model_config,out_dir=out_dir,
-                        baseline_prompt=baseline_prompt,baseline_stats=baseline_stats,
-                        full_context=full_context,query=query,
-                        p_true_flipping=detect_flip_to_true,
-                        dump_policy=dump_policy,dump_window=dump_window,save_logs=save_logs,
-                        stop_on_flip=stop_on_flip,)
-                finished_time= time.perf_counter() - method_time
-                results["methods"]["attention"]["time"] = finished_time
-                save_partial()
-
-            elif method_name=="attention_flow":
                 method_time = time.perf_counter()
-                # a dict
-                results["methods"]["attention_flow"] = run_attention_flow_method(model_con=model_config, out_dir=out_dir,
-                                                                       baseline_stats=baseline_stats,
-                                                                       full_context=full_context, query=query,
-                                                                       p_true_flipping=detect_flip_to_true,
-                                                                       dump_policy=dump_policy, dump_window=dump_window,
-                                                                       save_logs=save_logs,
-                                                                       stop_on_flip=stop_on_flip, )
-                finished_time = time.perf_counter() - method_time
-                results["methods"]["attention_flow"]["time"] = finished_time
+                results["methods"]["attention"] = run_attention_method(
+                    model_con=model_config,
+                    out_dir=out_dir,
+                    baseline_prompt=baseline_prompt,
+                    baseline_stats=baseline_stats,
+                    full_context=full_context,
+                    query=query,
+                    p_true_flipping=detect_flip_to_true,
+                    dump_policy=dump_policy,
+                    dump_window=dump_window,
+                    save_logs=save_logs,
+                    stop_on_flip=stop_on_flip,
+                )
+                results["methods"]["attention"]["time"] = time.perf_counter() - method_time
                 save_partial()
 
-
+            elif method_name == "attention_flow":
+                method_time = time.perf_counter()
+                results["methods"]["attention_flow"] = run_attention_flow_method(
+                    model_con=model_config,
+                    out_dir=out_dir,
+                    baseline_stats=baseline_stats,
+                    full_context=full_context,
+                    query=query,
+                    p_true_flipping=detect_flip_to_true,
+                    dump_policy=dump_policy,
+                    dump_window=dump_window,
+                    save_logs=save_logs,
+                    stop_on_flip=stop_on_flip,
+                )
+                results["methods"]["attention_flow"]["time"] = time.perf_counter() - method_time
+                save_partial()
 
             elif method_name == "random":
                 results["methods"]["random"] = run_random_method(
                     model_con=model_config,
-                    out_dir=out_dir,baseline_stats=baseline_stats,
+                    out_dir=out_dir,
+                    baseline_stats=baseline_stats,
                     full_context=full_context,
-                    query=query,seeds=seeds,
+                    query=query,
+                    seeds=seeds,
                     p_true_flipping=detect_flip_to_true,
-                    dump_policy=dump_policy,dump_window=dump_window,
+                    dump_policy=dump_policy,
+                    dump_window=dump_window,
                     save_logs=save_logs,
                     stop_on_flip=stop_on_flip,
                 )
-
+                save_partial()
 
             elif method_name == "context_cite":
-                method_time= time.perf_counter()
+                method_time = time.perf_counter()
                 results["methods"]["context_cite"] = run_context_cite_method(
                     model_con=model_config,
                     out_dir=out_dir,
                     baseline_stats=baseline_stats,
                     full_context=full_context,
-                    query=query,p_true_flipping=detect_flip_to_true,
-                    dump_policy=dump_policy,dump_window=dump_window,
+                    query=query,
+                    p_true_flipping=detect_flip_to_true,
+                    dump_policy=dump_policy,
+                    dump_window=dump_window,
                     save_logs=save_logs,
                     stop_on_flip=stop_on_flip,
                 )
-                finished_time= time.perf_counter() - method_time
-                results["methods"]["context_cite"]["time"] = finished_time
+                results["methods"]["context_cite"]["time"] = time.perf_counter() - method_time
                 save_partial()
-            
+
             elif method_name == "at2":
-                method_time= time.perf_counter()
+                method_time = time.perf_counter()
                 results["methods"]["at2"] = run_at2_method(
                     model_con=model_config,
                     out_dir=out_dir,
@@ -165,11 +174,119 @@ def run_full_pipeline(*,model_id: str,
                     query=query,
                     p_true_flipping=detect_flip_to_true,
                     dump_policy=dump_policy,
-                    dump_window=dump_window,save_logs=save_logs,
-                    stop_on_flip=stop_on_flip,)
-                finished_time = time.perf_counter() - method_time
-                results["methods"]["at2"]["time"] = finished_time
+                    dump_window=dump_window,
+                    save_logs=save_logs,
+                    stop_on_flip=stop_on_flip,
+                )
+                results["methods"]["at2"]["time"] = time.perf_counter() - method_time
                 save_partial()
+
+            elif method_name == "attention_ptrue_tie":
+                method_time = time.perf_counter()
+                results["methods"]["attention_ptrue_tie"] = run_attention_ptrue_tie_method(
+                    model_con=model_config,
+                    out_dir=out_dir,
+                    baseline_prompt=baseline_prompt,
+                    baseline_stats=baseline_stats,
+                    full_context=full_context,
+                    query=query,
+                    p_true_flipping=detect_flip_to_true,
+                    dump_policy=dump_policy,
+                    dump_window=dump_window,
+                    save_logs=save_logs,
+                    stop_on_flip=stop_on_flip,
+                )
+                results["methods"]["attention_ptrue_tie"]["time"] = time.perf_counter() - method_time
+                save_partial()
+
+            elif method_name == "context_cite_ptrue_tie":
+                method_time = time.perf_counter()
+                results["methods"]["context_cite_ptrue_tie"] = run_context_cite_ptrue_tie_method(
+                    model_con=model_config,
+                    out_dir=out_dir,
+                    baseline_stats=baseline_stats,
+                    full_context=full_context,
+                    query=query,
+                    p_true_flipping=detect_flip_to_true,
+                    dump_policy=dump_policy,
+                    dump_window=dump_window,
+                    save_logs=save_logs,
+                    stop_on_flip=stop_on_flip,
+                )
+                results["methods"]["context_cite_ptrue_tie"]["time"] = time.perf_counter() - method_time
+                save_partial()
+
+            elif method_name == "at2_ptrue_tie":
+                method_time = time.perf_counter()
+                results["methods"]["at2_ptrue_tie"] = run_at2_ptrue_tie_method(
+                    model_con=model_config,
+                    out_dir=out_dir,
+                    baseline_stats=baseline_stats,
+                    model_id=model_id,
+                    full_context=full_context,
+                    query=query,
+                    p_true_flipping=detect_flip_to_true,
+                    dump_policy=dump_policy,
+                    dump_window=dump_window,
+                    save_logs=save_logs,
+                    stop_on_flip=stop_on_flip,
+                )
+                results["methods"]["at2_ptrue_tie"]["time"] = time.perf_counter() - method_time
+                save_partial()
+
+            elif method_name == "attention_eps_recompute":
+                method_time = time.perf_counter()
+                results["methods"]["attention_eps_recompute"] = run_attention_eps_recompute_method(
+                    model_con=model_config,
+                    out_dir=out_dir,
+                    baseline_prompt=baseline_prompt,
+                    baseline_stats=baseline_stats,
+                    full_context=full_context,
+                    query=query,
+                    p_true_flipping=detect_flip_to_true,
+                    dump_policy=dump_policy,
+                    dump_window=dump_window,
+                    save_logs=save_logs,
+                    stop_on_flip=stop_on_flip,
+                )
+                results["methods"]["attention_eps_recompute"]["time"] = time.perf_counter() - method_time
+                save_partial()
+
+            elif method_name == "context_cite_eps_recompute":
+                method_time = time.perf_counter()
+                results["methods"]["context_cite_eps_recompute"] = run_context_cite_eps_recompute_method(
+                    model_con=model_config,
+                    out_dir=out_dir,
+                    baseline_stats=baseline_stats,
+                    full_context=full_context,
+                    query=query,
+                    p_true_flipping=detect_flip_to_true,
+                    dump_policy=dump_policy,
+                    dump_window=dump_window,
+                    save_logs=save_logs,
+                    stop_on_flip=stop_on_flip,
+                )
+                results["methods"]["context_cite_eps_recompute"]["time"] = time.perf_counter() - method_time
+                save_partial()
+
+            elif method_name == "at2_eps_recompute":
+                method_time = time.perf_counter()
+                results["methods"]["at2_eps_recompute"] = run_at2_eps_recompute_method(
+                    model_con=model_config,
+                    out_dir=out_dir,
+                    baseline_stats=baseline_stats,
+                    model_id=model_id,
+                    full_context=full_context,
+                    query=query,
+                    p_true_flipping=detect_flip_to_true,
+                    dump_policy=dump_policy,
+                    dump_window=dump_window,
+                    save_logs=save_logs,
+                    stop_on_flip=stop_on_flip,
+                )
+                results["methods"]["at2_eps_recompute"]["time"] = time.perf_counter() - method_time
+                save_partial()
+
             else:
                 raise ValueError(f"Unknown method: {method_name}")
         except Exception as e:
@@ -180,11 +297,10 @@ def run_full_pipeline(*,model_id: str,
             }
             save_partial()
 
-
     if skip_recompute is not None and 1 in skip_recompute:
         for rec_method in recompute:
             try:
-                method_time= time.perf_counter()
+                method_time = time.perf_counter()
                 result_name, payload = run_recompute_method(
                     model_con=model_config,
                     out_dir=out_dir,
@@ -192,56 +308,53 @@ def run_full_pipeline(*,model_id: str,
                     model_id=model_id,
                     full_context=full_context,
                     query=query,
-                    p_true_flipping=detect_flip_to_true,save_logs=save_logs,
+                    p_true_flipping=detect_flip_to_true,
+                    save_logs=save_logs,
                     stop_on_flip=stop_on_flip,
                 )
-                finished_time = time.perf_counter() - method_time
                 results["methods"][result_name] = payload
-                results["methods"][result_name]["time"] = finished_time
+                results["methods"][result_name]["time"] = time.perf_counter() - method_time
                 save_partial()
-
             except Exception as e:
                 if rec_method == "at2":
                     results["methods"]["recompute_at2"] = {"error": str(e), "status": "failed"}
                 else:
-                    save_partial()
                     raise
-
+                save_partial()
 
     elif skip_recompute is not None:
         for val in skip_recompute:
             for rec_method in recompute:
                 try:
-                    method_time= time.perf_counter()
+                    method_time = time.perf_counter()
                     result_name, payload = run_recompute_method(
                         model_con=model_config,
-                        out_dir=out_dir,rec_method=rec_method,model_id=model_id,
-                        full_context=full_context,query=query,
+                        out_dir=out_dir,
+                        rec_method=rec_method,
+                        model_id=model_id,
+                        full_context=full_context,
+                        query=query,
                         p_true_flipping=detect_flip_to_true,
                         skip_recompute=val,
                         save_logs=save_logs,
                         stop_on_flip=stop_on_flip,
                     )
-                    finished_time = time.perf_counter() - method_time
-                    results["methods"][f"{result_name}_SR{val}"] = payload
-                    results["methods"][f"{result_name}_SR{val}"]["time"] = finished_time
+                    key = f"{result_name}_SR{val}"
+                    results["methods"][key] = payload
+                    results["methods"][key]["time"] = time.perf_counter() - method_time
                     save_partial()
-
                 except Exception as e:
                     if rec_method == "at2":
                         results["methods"]["recompute_at2"] = {"error": str(e), "status": "failed"}
                     else:
-                        save_partial()
                         raise
+                    save_partial()
 
-
-
-
+    final_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_path = os.path.join(
         out_dir,
-        f"pipeline_result_methods_{method_tag}_recompute_{rec_tag}_{stamp}.json"
+        f"pipeline_result_methods_{method_tag}_recompute_{rec_tag}_{final_stamp}.json",
     )
-    print(f"[done] saved {out_path}")
     write_json(out_path, results)
     try:
         os.remove(partial_path)
@@ -250,6 +363,3 @@ def run_full_pipeline(*,model_id: str,
 
     print(f"[done] saved {out_path}")
     return out_path
-
-
-

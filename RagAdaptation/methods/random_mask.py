@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import time
 
 from RagAdaptation.core.artifacts import method_dir, plots_dir
 from RagAdaptation.core.plotting import create_p_true_function
@@ -10,6 +11,7 @@ from RagAdaptation.core.model_config import ModelConfig
 def run_random_method(*,model_con:ModelConfig, out_dir: str, baseline_stats, full_context: str, query: str, seeds: list[int], p_true_flipping: bool, dump_policy: str, dump_window: int, save_logs:bool=True, stop_on_flip:bool=False):
     results = {}
     for seed in seeds:
+        start_time= time.perf_counter_ns()
         rng = np.random.default_rng(seed)
         method_path = method_dir(out_dir, "random", seed=seed)
         masked_stats, masked_logps = mask_by_order(
@@ -24,8 +26,9 @@ def run_random_method(*,model_con:ModelConfig, out_dir: str, baseline_stats, ful
             dump_policy=dump_policy,
             dump_window=dump_window,
             baseline_stats=baseline_stats,
-            save_logs=save_logs,
-            stop_on_flip=stop_on_flip,
+            save_logs=False,
+            stop_on_flip=True,
         )
-        results[str(seed)] = {"masked_stats": masked_stats, "masked_logps": masked_logps}
+        seed_time= time.perf_counter_ns()-start_time
+        results[str(seed)] = {"masked_stats": masked_stats, "masked_logps": masked_logps,"time": seed_time}
     return results

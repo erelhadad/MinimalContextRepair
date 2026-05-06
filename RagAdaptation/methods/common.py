@@ -194,22 +194,39 @@ def _get_llm_core_and_layers(hf_model):
     return core, core.layers
 
 
-def _build_causal_mask_for_hidden_states(hf_model, hidden_states):
-    """
-    Build the same style of causal mask used by the AT2 attention extraction path,
-    but only once for the current prompt length.
-    """
+def _build_causal_mask_for_hidden_states(
+    hf_model,
+    hidden_states,
+    *,
+    device=None,
+    dtype=None,
+):
     input_embeds = hidden_states[0]
     _, seq_len, _ = input_embeds.shape
-    device = input_embeds.device
-    dtype = getattr(hf_model, "dtype", input_embeds.dtype)
 
-    position_ids = torch.arange(0, seq_len, device=device).unsqueeze(0)
+    if device is None:
+        device = input_embeds.device
 
-    attention_mask = torch.ones(seq_len, seq_len + 1, device=device, dtype=dtype)
+    if dtype is None:
+        dtype = getattr(hf_model, "dtype", input_embeds.dtype)
+
+    position_ids = torch.arange(
+        0,
+        seq_len,
+        device=device,
+        dtype=torch.long,
+    ).unsqueeze(0)
+
+    attention_mask = torch.ones(
+        seq_len,
+        seq_len + 1,
+        device=device,
+        dtype=dtype,
+    )
     attention_mask = torch.triu(attention_mask, diagonal=1)
-    attention_mask *= torch.finfo(dtype).min
-    attention_mask = attention_mask[None, None]  # [1, 1, seq, seq+1]
+    attention_mask = attention_mask * torch.finfo(dtype).min
+    attention_mask = attention_mask[None, None]
+
     return position_ids, attention_mask
 
 
@@ -259,8 +276,12 @@ def _project_qk_last_layer(
         if hasattr(self_attn, "k_norm") and self_attn.k_norm is not None:
             key_states = self_attn.k_norm(key_states)
 
-    position_ids, attention_mask = _build_causal_mask_for_hidden_states(hf_model, hidden_states)
-
+    position_ids, attention_mask = _build_causal_mask_for_hidden_states(
+        hf_model,
+        hidden_states,
+        device=layer_input.device,
+        dtype=layer_input.dtype,
+    )
     if hasattr(core, "rotary_emb_local") and getattr(self_attn, "is_sliding", False):
         position_embeddings = core.rotary_emb_local(layer_input, position_ids)
     else:
@@ -271,9 +292,11 @@ def _project_qk_last_layer(
     query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
     key_states = repeat_kv(key_states, self_attn.num_key_value_groups)
-    causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-    return query_states, key_states, causal_mask, head_dim
 
+    causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+    causal_mask = causal_mask.to(device=query_states.device, dtype=query_states.dtype)
+
+    return query_states, key_states, causal_mask, head_dim
 
 def get_attention_scores(
     hf_model,
