@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from pathlib import Path
+from prompts_format import normalize_true_false
 
 import torch
 
@@ -133,22 +134,15 @@ def _score_variants_sequential(model,prompt_id_lists: List[List[int]],variant_to
 
 
 @torch.no_grad()
-def compute_probs(
-    model,
-    tok,
-    prompts: List[str],
-    device,
-    expected_result,
-    batch_size: int,
-    masked_context_list=None,
+def compute_probs( model,tok,prompts: List[str],
+    device, expected_result, batch_size: int, masked_context_list=None,
     return_full_logp: bool = True,
     file_name: str = "output_compute_probe_brute_force.txt",
     detect_flip_to_true: bool = False,
     true_variants: Optional[List[str]] = None,
     false_variants: Optional[List[str]] = None,
     reduction: str = "logsumexp",  # "logsumexp" or "max"
-    save_file : bool = True,
-    stop_on_flip  : bool = False,
+    save_file : bool = True, stop_on_flip  : bool = False,
 ):
     """
     General class scorer for binary true/false answers.
@@ -210,7 +204,7 @@ def compute_probs(
     n=len(prompts)
     flag_seq_flip=False
     seq_flip=int(n/100) if n>=1000 else int(n/10)
-
+    generate_and_ptrue_agree= False
     pass_no_flip=10
 
     for i in range(0, n , batch_size):
@@ -274,16 +268,34 @@ def compute_probs(
                 )
 
                 res["is_flipped"]=flip_cond
-                if flip_cond and first_flip_index is None:
+                if flip_cond:
                     first_flip_index = i + j
                     flag_seq_flip= True
                     seq_flip = int(n / 100)
                     pass_no_flip = 10
 
-                    if stop_on_flip:
+                    # Generating the full response - if we report on this response we want to be sure that the actual response had changed
+                    enc = tok(prompts[i+j], return_tensors="pt", add_special_tokens=False).to(model.device)
+
+                    out_ids = model.generate(
+                        enc,
+                        max_new_tokens=20,
+                        do_sample=False,
+                        temperature=0.0,
+                        eos_token_id=tok.eos_token_id,
+                        pad_token_id=tok.pad_token_id,
+                    )
+                    gen_ids = out_ids[0, enc["input_ids"].shape[1]:]
+                    generated_response= tok.decode(gen_ids, skip_special_tokens=True).strip()
+                    norm_answer=normalize_true_false(generated_response)
+                    generate_and_ptrue_agree= (norm_answer =="true" and p_true_out_of_true_and_false>0.5 ) or (norm_answer =="false" and p_true_out_of_true_and_false<0.5)
+
+                    if stop_on_flip and generate_and_ptrue_agree:
                         flag_flip_stop=True
 
                     res["first_flip_index"] = first_flip_index  + 1
+                    res["generated_response"] = generated_response
+                    res["generate_and_ptrue_agree"] = generate_and_ptrue_agree
 
                     # even if we dont save for the file we still return the results
                     if save_file and log_f is not None:
@@ -296,20 +308,20 @@ def compute_probs(
                         log_f.write(f"After {i + j} iterations we had converted\n")
                         log_f.write(f"The prompt:\n{prompts[i + j]}\n")
 
-                elif flip_cond:
-                    seq_flip-=1
-                    pass_no_flip=10
-                    flag_seq_flip = True
-                    if seq_flip==0:
-                        flag_flip_stop = True
-
-                else:
-                    if flag_seq_flip:
-                        if pass_no_flip==0:
-                            seq_flip = int(n / 100)
-                            flag_seq_flip=False
-                        else:
-                            pass_no_flip -=1
+                # elif flip_cond:
+                #     seq_flip-=1
+                #     pass_no_flip=10
+                #     flag_seq_flip = True
+                #     if seq_flip==0:
+                #         flag_flip_stop = True
+                #
+                # else:
+                #     if flag_seq_flip:
+                #         if pass_no_flip==0:
+                #             seq_flip = int(n / 100)
+                #             flag_seq_flip=False
+                #         else:
+                #             pass_no_flip -=1
 
 
                 if return_full_logp:
