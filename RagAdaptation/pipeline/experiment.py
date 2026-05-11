@@ -13,14 +13,19 @@ from RagAdaptation.methods import (
     run_random_method,
     run_recompute_method,
     run_attention_flow_method,
+
     run_attention_ptrue_tie_method,
     run_context_cite_ptrue_tie_method,
     run_at2_ptrue_tie_method,
+
     run_attention_eps_recompute_method,
     run_context_cite_eps_recompute_method,
     run_at2_eps_recompute_method,
-)
 
+    run_attention_combined_method,
+    run_context_cite_combined_method,
+    run_at2_combined_method,
+)
 import RagAdaptation.core.model_config as Model_Config
 
 
@@ -53,10 +58,8 @@ def run_full_pipeline(*, model_id: str,
     baseline_stats_list, _ = compute_probs(
         hf_model, hf_tok,
         [baseline_prompt],
-        hf_device,
-        None,
-        batch_size=1,
-        return_full_logp=True,
+        hf_device,None,
+        batch_size=1,return_full_logp=True,
         file_name=str(baseline_dir / f"compute_probs_{model_id}.txt"),
         detect_flip_to_true=detect_flip_to_true,
         true_variants=true_variants,
@@ -268,7 +271,6 @@ def run_full_pipeline(*, model_id: str,
                 )
                 results["methods"]["context_cite_eps_recompute"]["time"] = time.perf_counter() - method_time
                 save_partial()
-
             elif method_name == "at2_eps_recompute":
                 method_time = time.perf_counter()
                 results["methods"]["at2_eps_recompute"] = run_at2_eps_recompute_method(
@@ -287,8 +289,63 @@ def run_full_pipeline(*, model_id: str,
                 results["methods"]["at2_eps_recompute"]["time"] = time.perf_counter() - method_time
                 save_partial()
 
+            elif method_name == "attention_combined":
+                method_time = time.perf_counter()
+                results["methods"]["attention_combined"] = run_attention_combined_method(
+                    model_con=model_config,
+                    out_dir=out_dir,
+                    baseline_prompt=baseline_prompt,
+                    baseline_stats=baseline_stats,
+                    full_context=full_context,
+                    query=query,
+                    p_true_flipping=detect_flip_to_true,
+                    dump_policy=dump_policy,
+                    dump_window=dump_window,
+                    save_logs=save_logs,
+                    stop_on_flip=stop_on_flip,
+                )
+                results["methods"]["attention_combined"]["time"] = time.perf_counter() - method_time
+                save_partial()
+
+            elif method_name == "context_cite_combined":
+                method_time = time.perf_counter()
+                results["methods"]["context_cite_combined"] = run_context_cite_combined_method(
+                    model_con=model_config,
+                    out_dir=out_dir,
+                    baseline_stats=baseline_stats,
+                    full_context=full_context,
+                    query=query,
+                    p_true_flipping=detect_flip_to_true,
+                    dump_policy=dump_policy,
+                    dump_window=dump_window,
+                    save_logs=save_logs,
+                    stop_on_flip=stop_on_flip,
+                )
+                results["methods"]["context_cite_combined"]["time"] = time.perf_counter() - method_time
+                save_partial()
+
+            elif method_name == "at2_combined":
+                method_time = time.perf_counter()
+                results["methods"]["at2_combined"] = run_at2_combined_method(
+                    model_con=model_config,
+                    out_dir=out_dir,
+                    baseline_stats=baseline_stats,
+                    model_id=model_id,
+                    full_context=full_context,
+                    query=query,
+                    p_true_flipping=detect_flip_to_true,
+                    dump_policy=dump_policy,
+                    dump_window=dump_window,
+                    save_logs=save_logs,
+                    stop_on_flip=stop_on_flip,
+                )
+                results["methods"]["at2_combined"]["time"] = time.perf_counter() - method_time
+                save_partial()
+
             else:
                 raise ValueError(f"Unknown method: {method_name}")
+
+
         except Exception as e:
             results["methods"][method_name] = {
                 "status": "failed",

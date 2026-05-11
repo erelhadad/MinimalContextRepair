@@ -470,7 +470,7 @@ def _attention_flow_scores_mapped_to_base(
         hf_device=hf_device,
         full_prompt=full_prompt,
     )
-
+    mode=None
     seq_len = mats[0].shape[0]
     if nx is None or seq_len > seq_len_limit:
         # same fallback behavior as your method:
@@ -480,7 +480,9 @@ def _attention_flow_scores_mapped_to_base(
 
         q_scores = joint[np.asarray(q_token_indices, dtype=np.int64)]
         scores_ctx = q_scores[:, np.asarray(ctx_token_indices, dtype=np.int64)].mean(axis=0)
+        mode="rollout_fallback"
     else:
+        mode="max_flow"
         G = _build_sparse_flow_graph(
             mats,
             source_nodes=[int(q) for q in q_token_indices],
@@ -502,7 +504,7 @@ def _attention_flow_scores_mapped_to_base(
             scores_ctx[out_i] = float(flow_val)
 
     scores_base = _map_scores_by_char_overlap(base_offsets, ctx_rel_offsets, scores_ctx)
-    return scores_base.astype(np.float32, copy=False)
+    return scores_base.astype(np.float32, copy=False) , mode
 
 def mask_by_order_recompute(
     *,full_context: str,query: str,
@@ -594,7 +596,7 @@ def mask_by_order_recompute(
                 base_offsets=base_offsets,
             )
         elif score_mode=="attention_flow":
-            scores_base = _attention_flow_scores_mapped_to_base(
+            scores_base , attention_flow_mode = _attention_flow_scores_mapped_to_base(
                 hf_model=hf_model,
                 hf_tok=hf_tok,
                 hf_device=hf_device,

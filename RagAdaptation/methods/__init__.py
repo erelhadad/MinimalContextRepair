@@ -11,7 +11,8 @@ from RagAdaptation.methods.adaptive_methods import (
     run_at2_ptrue_tie_method,
     run_attention_eps_recompute_method,
     run_context_cite_eps_recompute_method,
-    run_at2_eps_recompute_method,
+    run_at2_eps_recompute_method, run_attention_combined_method,
+    run_context_cite_combined_method,run_at2_combined_method
 )
 
 __all__ = [
@@ -28,4 +29,8 @@ __all__ = [
     "run_context_cite_eps_recompute_method",
     "run_at2_eps_recompute_method",
     "AT2_ESTIMATOR_BY_MODEL",
+    "run_attention_combined_method",
+    "run_context_cite_combined_method",
+    "run_at2_combined_method"
+
 ]
