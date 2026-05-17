@@ -428,11 +428,9 @@ def mask_by_order_adaptive_combined(full_context: str,query: str,
     )
 
     enc_full = hf_tok(
-        full_prompt,
-        add_special_tokens=False,
+        full_prompt,add_special_tokens=False,
         return_offsets_mapping=True,
-        truncation=False,
-        padding=False,
+        truncation=False,padding=False,
     )
 
     offsets_full = enc_full["offset_mapping"]
@@ -440,9 +438,7 @@ def mask_by_order_adaptive_combined(full_context: str,query: str,
         offsets_full = offsets_full.tolist()
 
     ctx_token_indices, ctx_rel_offsets_prompt, after_ctx = find_token_indices_by_substring(
-        full_prompt,
-        full_context,
-        offsets_full,
+        full_prompt,full_context,offsets_full,
         start_search_at=0,
     )
 
@@ -497,6 +493,7 @@ def mask_by_order_adaptive_combined(full_context: str,query: str,
 
         #normalization
     scores_vec = _minmax_normalize_scores(scores_vec)
+
     if len(scores_vec) == 0:
         raise ValueError("scores_vec is empty; cannot run adaptive masking")
 
@@ -555,7 +552,7 @@ def mask_by_order_adaptive_combined(full_context: str,query: str,
             # Scores changed, so now we must re-sort the remaining candidates.
             remaining = [int(i) for i in current_order if int(i) not in selected]
             remaining.sort(key=lambda i: float(scores_vec[i]), reverse=True)
-            epsilon= best_idx = int(remaining[0]) * 0.05
+            epsilon= float(scores_vec[int(remaining[0])]) * 0.3
 
             current_order = list(selected_order) + remaining
 
@@ -654,12 +651,9 @@ def mask_by_order_adaptive_combined(full_context: str,query: str,
     if dump_json_path and save_logs:
         if baseline_stats is None:
             baseline_stats_list, _ = compute_probs(
-                hf_model,hf_tok,
-                [full_prompt],
-                hf_device,
-                expected_result=None,
-                batch_size=1,
-                return_full_logp=True,
+                hf_model,hf_tok,[full_prompt],
+                hf_device,expected_result=None,
+                batch_size=1,return_full_logp=True,
                 file_name=compute_probs_file_name + ".baseline_tmp",
                 detect_flip_to_true=p_true_flipping,
                 true_variants=true_variants,

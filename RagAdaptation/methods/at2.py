@@ -74,7 +74,7 @@ def run_at2_method(
         hf_model=hf_model_at2,
         hf_tok=hf_tok_at2,
         score_estimator_path=est_path,
-        generate_kwargs={"max_new_tokens": 128, "do_sample": False},
+        generate_kwargs={"max_new_tokens": 20, "do_sample": False},
     )
 
     # Stable base tokenization of the original context

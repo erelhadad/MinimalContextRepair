@@ -1108,12 +1108,42 @@ def map_at2_scores_to_base_via_sources(
     return out
 
 
+def _module_first_param_device(module) -> torch.device | None:
+    try:
+        for p in module.parameters(recurse=True):
+            return p.device
+    except Exception:
+        pass
+
+    try:
+        for b in module.buffers(recurse=True):
+            return b.device
+    except Exception:
+        pass
+
+    return None
+
+
 def _pick_at2_feature_device(model) -> torch.device:
     """
-    For a sharded HF model (device_map=...), AT2 features usually come out on the
-    last CUDA shard. For a single-device model, just use the model's own device.
+    Pick the device where AT2 feature tensors are most likely to live.
+
+    For sharded decoder-only HF models, using max(cuda_id) from hf_device_map is only
+    a heuristic. A better target is the actual device of the last decoder layer,
+    because AT2 attribution features are usually produced from final/late model
+    activations.
     """
-    # HF sharded / accelerate-dispatched model
+    # Best case: infer from the actual last decoder layer.
+    try:
+        _core, layers = _get_llm_core_and_layers(model)
+        if len(layers) > 0:
+            dev = _module_first_param_device(layers[-1])
+            if dev is not None:
+                return dev
+    except Exception:
+        pass
+
+    # Fallback: use hf_device_map.
     device_map = getattr(model, "hf_device_map", None)
     if isinstance(device_map, dict) and device_map:
         cuda_ids = []
@@ -1123,14 +1153,56 @@ def _pick_at2_feature_device(model) -> torch.device:
                     cuda_ids.append(int(dev.split(":")[1]))
                 except Exception:
                     pass
+            elif isinstance(dev, int):
+                cuda_ids.append(int(dev))
+
         if cuda_ids:
             return torch.device(f"cuda:{max(cuda_ids)}")
 
-    # fallback: normal single-device model
+    # Fallback: normal single-device model.
     try:
         return next(model.parameters()).device
     except Exception:
         return torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+def _module_device_summary(module: torch.nn.Module) -> dict[str, int]:
+    counts: dict[str, int] = {}
+
+    for p in module.parameters(recurse=True):
+        key = str(p.device)
+        counts[key] = counts.get(key, 0) + p.numel()
+
+    for b in module.buffers(recurse=True):
+        key = str(b.device)
+        counts[key] = counts.get(key, 0) + b.numel()
+
+    return counts
+
+
+def _move_at2_estimator_to_device(attributor, target_device: torch.device) -> None:
+    """
+    Move the AT2 score estimator module to the same device as the expected AT2 features.
+    """
+    moved_any = False
+
+    for attr_name in ("score_estimator", "estimator", "_score_estimator"):
+        mod = getattr(attributor, attr_name, None)
+        if isinstance(mod, torch.nn.Module):
+            mod.to(target_device)
+            mod.eval()
+            moved_any = True
+
+    if not moved_any:
+        print("[AT2-device-debug] WARNING: could not find score estimator module on attributor.")
+
+
+def _is_device_mismatch_error(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    return (
+        "expected all tensors to be on the same device" in msg
+        or "found at least two devices" in msg
+        or "indices should be either on cpu or on the same device" in msg
+    )
 
 
 def get_at2_token_scores(
@@ -1145,6 +1217,8 @@ def get_at2_token_scores(
     from at2.tasks import SimpleContextAttributionTask
     from at2 import AT2Attributor
 
+    # Keep task construction before cuda-default switching.
+    # This avoids disturbing model.generate on sharded models.
     task = SimpleContextAttributionTask(
         context=full_context,
         query=query,
@@ -1155,19 +1229,43 @@ def get_at2_token_scores(
     )
 
     score_estimator_path = Path(score_estimator_path)
-    attributor = AT2Attributor.from_path(task, score_estimator_path)
-
-    # ---- NEW: align estimator device with the device used by model features ----
     target_device = _pick_at2_feature_device(hf_model)
 
-    for attr_name in ("score_estimator", "estimator", "_score_estimator"):
-        mod = getattr(attributor, attr_name, None)
-        if isinstance(mod, torch.nn.Module):
-            mod.to(target_device)
-            mod.eval()
+    prev_cuda_device = None
+    if target_device.type == "cuda" and torch.cuda.is_available():
+        prev_cuda_device = torch.cuda.current_device()
+        torch.cuda.set_device(target_device)
 
-    gen = task.generation
-    start, end = 0, len(gen)
-    scores = attributor.get_attribution_scores(start=start, end=end)
+    try:
+        attributor = AT2Attributor.from_path(task, score_estimator_path)
+        _move_at2_estimator_to_device(attributor, target_device)
 
-    return np.asarray(scores), gen, list(task.sources)
+        gen = task.generation
+        start, end = 0, len(gen)
+
+        try:
+            scores = attributor.get_attribution_scores(start=start, end=end)
+        except Exception as e:
+            if _is_device_mismatch_error(e):
+                print("\n[AT2-device-debug] Device mismatch inside AT2.")
+                print(f"[AT2-device-debug] target_device={target_device}")
+                print(f"[AT2-device-debug] model.hf_device_map={getattr(hf_model, 'hf_device_map', None)}")
+
+                for attr_name in ("score_estimator", "estimator", "_score_estimator"):
+                    mod = getattr(attributor, attr_name, None)
+                    if isinstance(mod, torch.nn.Module):
+                        print(
+                            f"[AT2-device-debug] {attr_name} device summary="
+                            f"{_module_device_summary(mod)}"
+                        )
+
+                print(f"[AT2-device-debug] generation_len={len(gen)}")
+                print(f"[AT2-device-debug] num_sources={len(task.sources)}\n")
+
+            raise
+
+        return np.asarray(scores), gen, list(task.sources)
+
+    finally:
+        if prev_cuda_device is not None:
+            torch.cuda.set_device(prev_cuda_device)

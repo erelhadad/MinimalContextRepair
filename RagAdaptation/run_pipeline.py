@@ -9,6 +9,9 @@ from RagAdaptation.pipeline.runner import run_dataset
 
 
 '''
+ find . -type d -name "methods" -prune -exec rm -rf {} +
+
+
 python -m RagAdaptation.run_pipeline --input ./outputs/reports/dataset_creation/hotpot_yesno__validation__qwen/report_flip_only__Qwen__Qwen3-4B-Instruct-2507.json --out_dir qwen_hotpot_pipe --models "Qwen/Qwen3-4B-Instruct-2507" --stop_at_flip --examples_range 24
 '''
 
@@ -31,6 +34,9 @@ def main():
     ap.add_argument("--save_logs",  action="store_true")
     ap.add_argument("--stop_at_flip", action="store_true")
     ap.add_argument("--examples_range", nargs=2, type=int,help="Range of examples to run")
+    ap.add_argument("--tau",type=float)
+    ap.add_argument("--epsilon",type=float)
+    ap.add_argument("--k",type=int)
     args = ap.parse_args()
 
     config = PipelineConfig(
@@ -46,6 +52,9 @@ def main():
         save_logs=args.save_logs,
         stop_at_flip=args.stop_at_flip,
         examples_range=args.examples_range,
+        tau=args.tau
+        ,epsilon=args.epsilon,
+        k=args.k
     )
 
     run_root = run_dataset(config)

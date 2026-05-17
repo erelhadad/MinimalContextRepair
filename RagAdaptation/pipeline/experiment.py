@@ -27,7 +27,7 @@ from RagAdaptation.methods import (
     run_at2_combined_method,
 )
 import RagAdaptation.core.model_config as Model_Config
-
+from RagAdaptation.pipeline.runner import _is_cuda_oom
 
 def run_full_pipeline(*, model_id: str,
     query: str, full_context: str,

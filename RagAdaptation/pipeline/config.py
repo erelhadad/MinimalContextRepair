@@ -23,4 +23,7 @@ class PipelineConfig:
     save_logs :bool = True
     stop_at_flip :bool = True
     examples_range: Tuple[int,Optional[int]] = None
+    tau:float = 0.5
+    epsilon:float = 1e-2
+    k:int = 5
 

@@ -14,6 +14,10 @@ from RagAdaptation.prompts_format import normalize_true_false
 from RagAdaptation.core.models import cleanup_memory, unload_all_hf_models
 
 
+def find_free_gpu():
+    if torch.cuda.is_available():
+        num_gpus = torch.cuda.device_count()
+
 def load_items(path: str | Path):
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     if isinstance(data, dict) and "results" in data:
@@ -22,6 +26,7 @@ def load_items(path: str | Path):
         return data
     raise ValueError("Unsupported JSON format")
 
+import RagAdaptation.methods.adaptive_methods as adaptive_methods
 
 def norm_expected(x):
     if isinstance(x, bool):
@@ -51,6 +56,9 @@ def build_manifest(config: PipelineConfig, items_count: int) -> dict[str, Any]:
         "save_logs":config.save_logs,
         "stop_at_flip":config.stop_at_flip,
         "examples_range":config.examples_range,
+        "tau":config.tau,
+        "epsilon":config.epsilon,
+        "k":config.k,
     }
 
 
@@ -58,6 +66,12 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
     items = load_items(config.input_path)
     run_root = create_run_root(config.output_root)
     write_manifest(run_root, build_manifest(config, len(items)))
+    if config.tau:
+        adaptive_methods._DEFAULT_COMBINED_TAU=config.tau
+    if config.epsilon:
+        adaptive_methods._DEFAULT_COMBINED_EPS=config.epsilon
+    if config.k:
+        adaptive_methods._DEFAULT_COMBINED_K=config.k
 
     if run_pipeline_fn is None:
         from RagAdaptation.pipeline.experiment import run_full_pipeline as run_pipeline_fn
@@ -117,6 +131,8 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
                 print(f"[run] ex={ex_i} model={model_id} flip_to_true={detect_flip_to_true}")
             except Exception as e:
                 if _is_cuda_oom(e):
+                    #alocation on a new gpu and retrying
+
                     _cleanup_after_oom()
                     err_path = Path(mdl_dir) / "pipeline_oom.json"
                     err_path.parent.mkdir(parents=True, exist_ok=True)

@@ -30,6 +30,7 @@ from RagAdaptation.methods.common import (
 )
 from RagAdaptation.prompts_format import TF_RAG_TEMPLATE, TF_RAG_TEMPLATE_A2T
 from RagAdaptation.core.prompting import ChatPromptTemplate
+from RagAdaptation.core.models import get_hf_scorer_single_device
 
 
 _DEFAULT_TIE_ABS_GAP = 1e-4
@@ -179,14 +180,17 @@ def run_at2_ptrue_tie_method(
     if est_path is None:
         raise ValueError(f"No AT2 estimator registered for model={model_id}")
 
-    hf_model_main, hf_tok_main, _hf_device_main = model_con.load()
+    hf_model_main, hf_tok_main, _hf_device_main = get_hf_scorer_single_device(
+    model_id=model_id,
+    device="cuda:0",
+    )
     scores, gen, sources = get_at2_token_scores(
         full_context=full_context,
         query=query,
         hf_model=hf_model_main,
         hf_tok=hf_tok_main,
         score_estimator_path=est_path,
-        generate_kwargs={"max_new_tokens": 128, "do_sample": False},
+        generate_kwargs={"max_new_tokens": 20, "do_sample": False},
     )
     _, base_offsets = tokenize_context_with_offsets(full_context, hf_tok_main)
     scores_base = map_at2_scores_to_base_via_sources(
@@ -439,31 +443,31 @@ def run_context_cite_eps_recompute_method(
 
 
 def run_at2_eps_recompute_method(
-    *,
-    model_con: ModelConfig,
+    *,model_con: ModelConfig,
     out_dir: str,
     baseline_stats,
     model_id: str,
     full_context: str,
     query: str,
     p_true_flipping: bool,
-    dump_policy: str,
-    dump_window: int,
-    save_logs: bool = True,
+    dump_policy: str, dump_window: int,save_logs: bool = True,
     stop_on_flip: bool = False,
 ):
     est_path = AT2_ESTIMATOR_BY_MODEL.get(model_id)
     if est_path is None:
         raise ValueError(f"No AT2 estimator registered for model={model_id}")
 
-    hf_model_main, hf_tok_main, _hf_device_main = model_con.load()
+    hf_model_main, hf_tok_main, _hf_device_main = get_hf_scorer_single_device(
+    model_id=model_id,
+    device="cuda:0",
+    )
     scores, gen, sources = get_at2_token_scores(
         full_context=full_context,
         query=query,
         hf_model=hf_model_main,
         hf_tok=hf_tok_main,
         score_estimator_path=est_path,
-        generate_kwargs={"max_new_tokens": 128, "do_sample": False},
+        generate_kwargs={"max_new_tokens": 20, "do_sample": False},
     )
     _, base_offsets = tokenize_context_with_offsets(full_context, hf_tok_main)
     scores_base = map_at2_scores_to_base_via_sources(
@@ -509,7 +513,7 @@ def run_at2_eps_recompute_method(
             masked_context=masked_context,
             query=query,base_offsets=base_offsets,
             score_estimator_path=est_path,
-            generate_kwargs={"max_new_tokens": 128, "do_sample": False},
+            generate_kwargs={"max_new_tokens": 20, "do_sample": False},
         )
 
     method_name = "at2_eps_recompute"
@@ -546,10 +550,8 @@ def run_at2_eps_recompute_method(
 #combinded methods iterations
 
 def run_attention_combined_method(
-    *,
-    model_con: ModelConfig,
-    out_dir: str,
-    baseline_prompt: str,
+    *, model_con: ModelConfig,
+    out_dir: str,baseline_prompt: str,
     baseline_stats,
     full_context: str,
     query: str,
@@ -796,7 +798,12 @@ def run_at2_combined_method(
     if est_path is None:
         raise ValueError(f"No AT2 estimator registered for model={model_id}")
 
-    hf_model_main, hf_tok_main, _hf_device_main = model_con.load()
+
+
+    hf_model_main, hf_tok_main, _hf_device_main = get_hf_scorer_single_device(
+    model_id=model_id,
+    device="cuda:0",
+    )
 
     scores, gen, sources = get_at2_token_scores(
         full_context=full_context,
@@ -804,7 +811,7 @@ def run_at2_combined_method(
         hf_model=hf_model_main,
         hf_tok=hf_tok_main,
         score_estimator_path=est_path,
-        generate_kwargs={"max_new_tokens": 128, "do_sample": False},
+        generate_kwargs={"max_new_tokens": 20, "do_sample": False},
     )
 
     _, base_offsets = tokenize_context_with_offsets(full_context, hf_tok_main)
@@ -861,7 +868,7 @@ def run_at2_combined_method(
             query=query,
             base_offsets=base_offsets,
             score_estimator_path=est_path,
-            generate_kwargs={"max_new_tokens": 128, "do_sample": False},
+            generate_kwargs={"max_new_tokens": 20, "do_sample": False},
         )
 
     masked_stats, masked_logps, order, scores_at_pick = mask_by_order_adaptive_combined(
