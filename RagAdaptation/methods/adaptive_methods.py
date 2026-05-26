@@ -800,10 +800,7 @@ def run_at2_combined_method(
 
 
 
-    hf_model_main, hf_tok_main, _hf_device_main = get_hf_scorer_single_device(
-    model_id=model_id,
-    device="cuda:0",
-    )
+    hf_model_main, hf_tok_main, _hf_device_main = model_con.load()
 
     scores, gen, sources = get_at2_token_scores(
         full_context=full_context,

@@ -82,13 +82,10 @@ def _get_mask_prompt_template(change_template_contextCite: bool):
 
 
 def iter_masked_prompts_iterative_chunks(
-    document: str,
-    query: str,
-    offsets: List[Tuple[int, int]],
-    *,
-    k: int = 1,
-    change_template_contextCite: bool = False,
+    document: str,query: str,offsets: List[Tuple[int, int]],
+    *,k: int = 1,change_template_contextCite: bool = False,
     chunk_size: int = 32,
+    mode:str ="mask"
 ):
     """
     Yield masked prompts in chunks while preserving the exact cumulative masking logic
@@ -129,29 +126,31 @@ def iter_masked_prompts_iterative_chunks(
 
 
 def create_masked_prompts_iterative(
-    document: str,
-    query: str,
-    offsets: List[Tuple[int, int]],
-    k: int = 1,
-    change_template_contextCite: bool = False,
-):
+    document: str,query: str,offsets: List[Tuple[int, int]],
+    k: int = 1,change_template_contextCite: bool = False,mode :str = "mask"):
     """
     Compatibility wrapper that preserves the old return value by materializing the
     chunked iterator.
     """
     batch: List[str] = []
     masked_context_list: List[str] = []
-    for prompt_chunk, context_chunk in iter_masked_prompts_iterative_chunks(
-        document,
-        query,
-        offsets,
-        k=k,
-        change_template_contextCite=change_template_contextCite,
-        chunk_size=max(1, len(offsets) or 1),
-    ):
-        batch.extend(prompt_chunk)
-        masked_context_list.extend(context_chunk)
-
+    if mode=="mask":
+        for prompt_chunk, context_chunk in iter_masked_prompts_iterative_chunks(
+            document,
+            query,
+            offsets,
+            k=k,
+            change_template_contextCite=change_template_contextCite,
+            chunk_size=max(1, len(offsets) or 1),
+        ):
+            batch.extend(prompt_chunk)
+            masked_context_list.extend(context_chunk)
+    elif mode=="antonym":
+        pass
+    elif mode=="neutral":
+        pass
+    else:
+        raise ValueError("unrecognized mode")
     return batch, masked_context_list
 
 
@@ -1220,12 +1219,8 @@ def get_at2_token_scores(
     # Keep task construction before cuda-default switching.
     # This avoids disturbing model.generate on sharded models.
     task = SimpleContextAttributionTask(
-        context=full_context,
-        query=query,
-        model=hf_model,
-        tokenizer=hf_tok,
-        source_type="token",
-        generate_kwargs=generate_kwargs,
+        context=full_context,query=query,model=hf_model,
+        tokenizer=hf_tok,source_type="token",generate_kwargs=generate_kwargs,
     )
 
     score_estimator_path = Path(score_estimator_path)

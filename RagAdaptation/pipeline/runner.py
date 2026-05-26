@@ -66,12 +66,6 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
     items = load_items(config.input_path)
     run_root = create_run_root(config.output_root)
     write_manifest(run_root, build_manifest(config, len(items)))
-    if config.tau:
-        adaptive_methods._DEFAULT_COMBINED_TAU=config.tau
-    if config.epsilon:
-        adaptive_methods._DEFAULT_COMBINED_EPS=config.epsilon
-    if config.k:
-        adaptive_methods._DEFAULT_COMBINED_K=config.k
 
     if run_pipeline_fn is None:
         from RagAdaptation.pipeline.experiment import run_full_pipeline as run_pipeline_fn
@@ -127,6 +121,9 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
                     skip_recompute=config.skip_recompute,
                     save_logs=config.save_logs,
                     stop_on_flip=config.stop_at_flip,
+                    tau=config.tau,
+                    epsilon=config.epsilon,
+                    k=config.k,
                 )
                 print(f"[run] ex={ex_i} model={model_id} flip_to_true={detect_flip_to_true}")
             except Exception as e:

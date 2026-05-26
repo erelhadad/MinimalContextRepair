@@ -34,9 +34,9 @@ def main():
     ap.add_argument("--save_logs",  action="store_true")
     ap.add_argument("--stop_at_flip", action="store_true")
     ap.add_argument("--examples_range", nargs=2, type=int,help="Range of examples to run")
-    ap.add_argument("--tau",type=float)
-    ap.add_argument("--epsilon",type=float)
-    ap.add_argument("--k",type=int)
+    ap.add_argument("--tau",type=float, default=0.01)
+    ap.add_argument("--epsilon",type=float, default=0.6)
+    ap.add_argument("--k",type=int, default=5)
     args = ap.parse_args()
 
     config = PipelineConfig(

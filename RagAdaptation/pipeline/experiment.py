@@ -41,6 +41,9 @@ def run_full_pipeline(*, model_id: str,
     skip_recompute: List[int] = None,
     save_logs: bool = True,
     stop_on_flip: bool = False,
+    tau: float = 0.01,
+    epsilon: float = 0.6,
+    k: int = 5,
 ):
 
     model_config = Model_Config.ModelConfig(model_id)
@@ -303,6 +306,9 @@ def run_full_pipeline(*, model_id: str,
                     dump_window=dump_window,
                     save_logs=save_logs,
                     stop_on_flip=stop_on_flip,
+                    tau=tau,
+                    epsilon=epsilon,
+                    k=k,
                 )
                 results["methods"]["attention_combined"]["time"] = time.perf_counter() - method_time
                 save_partial()
@@ -320,6 +326,9 @@ def run_full_pipeline(*, model_id: str,
                     dump_window=dump_window,
                     save_logs=save_logs,
                     stop_on_flip=stop_on_flip,
+                    tau=tau,
+                    epsilon=epsilon,
+                    k=k,
                 )
                 results["methods"]["context_cite_combined"]["time"] = time.perf_counter() - method_time
                 save_partial()
@@ -338,6 +347,9 @@ def run_full_pipeline(*, model_id: str,
                     dump_window=dump_window,
                     save_logs=save_logs,
                     stop_on_flip=stop_on_flip,
+                    tau=tau,
+                    epsilon=epsilon,
+                    k=k,
                 )
                 results["methods"]["at2_combined"]["time"] = time.perf_counter() - method_time
                 save_partial()

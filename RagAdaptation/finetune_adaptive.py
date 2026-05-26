@@ -76,7 +76,7 @@ def main() -> None:
 
     ap.add_argument("--examples_json", type=Path, required=True)
     ap.add_argument("--models", nargs="+", required=True)
-    ap.add_argument("--method", type=str, required=True)
+    ap.add_argument("--methods", nargs="+" ,type=str, required=True)
 
     ap.add_argument("--tau", nargs="+", type=float, default=[0.05, 0.1, 0.2])
     ap.add_argument("--epsilon", nargs="+", type=float, default=[0.5, 0.6, 0.7])
@@ -99,32 +99,29 @@ def main() -> None:
     examples_range = (
         tuple(args.examples_range) if args.examples_range is not None else None
     )
-
-    for model, tau, epsilon, k in itertools.product(
-        args.models,
-        args.tau,
-        args.epsilon,
-        args.k,
-    ):
-        try:
-            run_method_pipeline(
-                examples_json=args.examples_json,
-                model=model,
-                method=args.method,
-                tau=tau,
-                epsilon=epsilon,
-                k=k,
-                examples_range=examples_range,
-                save_logs=args.save_logs,
-            )
-        except subprocess.CalledProcessError as e:
-            print(
-                f"[FAILED] model={model} method={args.method} "
-                f"tau={tau} epsilon={epsilon} k={k} returncode={e.returncode}",
-                flush=True,
-            )
-            if not args.keep_going:
-                raise
+    methods= args.methods
+    for method in methods:
+        for model, tau, epsilon, k in itertools.product(
+            args.models,args.tau,args.epsilon,args.k,):
+            try:
+                run_method_pipeline(
+                    examples_json=args.examples_json,
+                    model=model,
+                    method=method,
+                    tau=tau,
+                    epsilon=epsilon,
+                    k=k,
+                    examples_range=examples_range,
+                    save_logs=args.save_logs,
+                )
+            except subprocess.CalledProcessError as e:
+                print(
+                    f"[FAILED] model={model} method={method} "
+                    f"tau={tau} epsilon={epsilon} k={k} returncode={e.returncode}",
+                    flush=True,
+                )
+                if not args.keep_going:
+                    raise
 
 
 if __name__ == "__main__":
