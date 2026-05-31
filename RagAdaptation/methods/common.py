@@ -19,18 +19,24 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from RagAdaptation.compute_probs_updated import compute_probs
-from RagAdaptation.core.prompting import ChatPromptTemplate
+from RagAdaptation.core.prompting import (
+    ChatPromptTemplate,
+    WordUnit,
+    InterventionMode,
+    coerce_intervention_mode,
+    create_word_intervention_prompts_iterative,
+    iter_word_intervention_prompts_iterative_chunks,
+    build_word_candidates_no_aggregation,
+    _filter_word_order_by_available_intervention,
+)
 from RagAdaptation.prompts_format import TF_RAG_TEMPLATE, TF_RAG_TEMPLATE_A2T
 
 
 
 
-
 def find_token_indices_by_substring(
-    full_text: str,
-    substring: str,
-    offsets_mapping: Sequence[Tuple[int, int]],
-    start_search_at: int = 0,):
+    full_text: str,substring: str,offsets_mapping: Sequence[Tuple[int, int]],start_search_at: int = 0,):
+
     begin = full_text.find(substring, start_search_at)
     if begin < 0:
         raise ValueError(
@@ -80,13 +86,8 @@ def _get_mask_prompt_template(change_template_contextCite: bool):
     return ChatPromptTemplate.from_template(TF_RAG_TEMPLATE)
 
 
-
-def iter_masked_prompts_iterative_chunks(
-    document: str,query: str,offsets: List[Tuple[int, int]],
-    *,k: int = 1,change_template_contextCite: bool = False,
-    chunk_size: int = 32,
-    mode:str ="mask"
-):
+def iter_masked_prompts_iterative_chunks(document: str,query: str,offsets: List[Tuple[int, int]],
+    *,k: int = 1,change_template_contextCite: bool = False,chunk_size: int = 32,mode:str ="mask"):
     """
     Yield masked prompts in chunks while preserving the exact cumulative masking logic
     of the original implementation.
@@ -107,7 +108,12 @@ def iter_masked_prompts_iterative_chunks(
 
     for i in range(len(offsets)):
         masked_spans.extend(offsets[i : i + k])
-        masked_context = mask_context_spans_same_length(document, masked_spans)
+        if mode=="mask":
+            masked_context = mask_context_spans_same_length(document, masked_spans)
+        if mode== "antonym":
+            pass
+        if mode=="antonym":
+            pass
         context_chunk.append(masked_context)
 
         if change_template_contextCite:
@@ -135,14 +141,9 @@ def create_masked_prompts_iterative(
     batch: List[str] = []
     masked_context_list: List[str] = []
     if mode=="mask":
-        for prompt_chunk, context_chunk in iter_masked_prompts_iterative_chunks(
-            document,
-            query,
-            offsets,
-            k=k,
-            change_template_contextCite=change_template_contextCite,
-            chunk_size=max(1, len(offsets) or 1),
-        ):
+        for prompt_chunk, context_chunk in iter_masked_prompts_iterative_chunks(document,query,offsets,k=k,
+            change_template_contextCite=change_template_contextCite,chunk_size=max(1, len(offsets) or 1),):
+
             batch.extend(prompt_chunk)
             masked_context_list.extend(context_chunk)
     elif mode=="antonym":
@@ -193,12 +194,7 @@ def _get_llm_core_and_layers(hf_model):
     return core, core.layers
 
 
-def _build_causal_mask_for_hidden_states(
-    hf_model,
-    hidden_states,
-    *,
-    device=None,
-    dtype=None,
+def _build_causal_mask_for_hidden_states(hf_model,hidden_states,*,device=None,dtype=None,
 ):
     input_embeds = hidden_states[0]
     _, seq_len, _ = input_embeds.shape
@@ -209,19 +205,9 @@ def _build_causal_mask_for_hidden_states(
     if dtype is None:
         dtype = getattr(hf_model, "dtype", input_embeds.dtype)
 
-    position_ids = torch.arange(
-        0,
-        seq_len,
-        device=device,
-        dtype=torch.long,
-    ).unsqueeze(0)
+    position_ids = torch.arange(0,seq_len,device=device,dtype=torch.long,).unsqueeze(0)
 
-    attention_mask = torch.ones(
-        seq_len,
-        seq_len + 1,
-        device=device,
-        dtype=dtype,
-    )
+    attention_mask = torch.ones(seq_len,seq_len + 1,device=device,dtype=dtype,)
     attention_mask = torch.triu(attention_mask, diagonal=1)
     attention_mask = attention_mask * torch.finfo(dtype).min
     attention_mask = attention_mask[None, None]
@@ -229,12 +215,7 @@ def _build_causal_mask_for_hidden_states(
     return position_ids, attention_mask
 
 
-def _project_qk_last_layer(
-    hf_model,
-    hidden_states,
-    *,
-    model_type: str,
-):
+def _project_qk_last_layer(hf_model,hidden_states,*,model_type: str,):
     """
     Reconstruct Q/K for the LAST attention layer from hidden states, without asking
     the full model to materialize output_attentions=True.
@@ -276,11 +257,8 @@ def _project_qk_last_layer(
             key_states = self_attn.k_norm(key_states)
 
     position_ids, attention_mask = _build_causal_mask_for_hidden_states(
-        hf_model,
-        hidden_states,
-        device=layer_input.device,
-        dtype=layer_input.dtype,
-    )
+        hf_model,hidden_states,device=layer_input.device,dtype=layer_input.dtype,)
+
     if hasattr(core, "rotary_emb_local") and getattr(self_attn, "is_sliding", False):
         position_embeddings = core.rotary_emb_local(layer_input, position_ids)
     else:
@@ -297,15 +275,57 @@ def _project_qk_last_layer(
 
     return query_states, key_states, causal_mask, head_dim
 
-def get_attention_scores(
-    hf_model,
-    hf_tok,
-    hf_device,
-    *,
-    full_prompt: str,
-    full_context: str,
-    query: str,
-):
+
+
+def _overlap_len(a: tuple[int, int], b: tuple[int, int]) -> int:
+    return max(0, min(a[1], b[1]) - max(a[0], b[0]))
+
+
+def attention_token_scores_to_word_scores(*,full_context: str,hf_tok,token_scores: np.ndarray,word_units: Sequence[WordUnit],reduction: str = "sum",
+) -> np.ndarray:
+    """
+    Convert tokenizer-token attention scores into WordUnit scores.
+
+    The attention extractor should stay token-level. This function is the only
+    bridge from token attribution to word-level intervention.
+    """
+    enc = hf_tok(full_context,add_special_tokens=False,return_offsets_mapping=True,truncation=False,padding=False,)
+
+    token_offsets = enc["offset_mapping"]
+    if hasattr(token_offsets, "tolist"):
+        token_offsets = token_offsets.tolist()
+
+    token_offsets = [(int(s), int(e)) for s, e in token_offsets]
+    token_scores = np.asarray(token_scores, dtype=np.float32)
+
+    out = np.zeros(len(word_units), dtype=np.float32)
+
+    for unit in word_units:
+        vals = []
+        w_span = (int(unit.start), int(unit.end))
+
+        for tok_i, t_span in enumerate(token_offsets):
+            if tok_i >= len(token_scores):
+                break
+            if t_span[1] <= t_span[0]:
+                continue
+            if _overlap_len(w_span, t_span) > 0:
+                vals.append(float(token_scores[tok_i]))
+
+        if not vals:
+            out[int(unit.word)] = 0.0
+        elif reduction == "sum":
+            out[int(unit.word)] = float(np.sum(vals))
+        elif reduction == "mean":
+            out[int(unit.word)] = float(np.mean(vals))
+        elif reduction == "max":
+            out[int(unit.word)] = float(np.max(vals))
+        else:
+            raise ValueError(f"Unsupported reduction={reduction!r}")
+
+    return out
+
+def get_attention_scores(hf_model, hf_tok,hf_device,*, full_prompt: str,full_context: str,query: str,):
     """
     Compute context-token attention scores without materializing output_attentions=True.
 
@@ -319,29 +339,16 @@ def get_attention_scores(
     we reconstruct the relevant last-layer attention block from hidden states, in the
     style used by AT2, instead of storing the full attention tensor for the whole model.
     """
-    enc_full = hf_tok(
-        full_prompt,
-        add_special_tokens=False,
-        return_offsets_mapping=True,
-        truncation=False,
-        padding=False,
-    )
+    enc_full = hf_tok(full_prompt,add_special_tokens=False,return_offsets_mapping=True,truncation=False,padding=False,)
 
     offsets_full = enc_full["offset_mapping"]
     if hasattr(offsets_full, "tolist"):
         offsets_full = offsets_full.tolist()
 
-    ctx_token_indices, _ctx_rel_offsets, after_ctx = find_token_indices_by_substring(
-        full_prompt,
-        full_context,
-        offsets_full,
-        start_search_at=0,
-    )
+    ctx_token_indices, _ctx_rel_offsets, after_ctx = find_token_indices_by_substring(full_prompt,full_context,offsets_full,start_search_at=0,)
+
     q_token_indices, _, _ = find_token_indices_by_substring(
-        full_prompt,
-        query,
-        offsets_full,
-        start_search_at=after_ctx,
+        full_prompt,query,offsets_full,start_search_at=after_ctx,
     )
 
     if not ctx_token_indices:
@@ -349,23 +356,13 @@ def get_attention_scores(
     if not q_token_indices:
         raise ValueError("Could not find any query tokens inside the full prompt.")
 
-    enc = hf_tok(
-        full_prompt,
-        add_special_tokens=False,
-        return_tensors="pt",
-        truncation=False,
-        padding=False,
+    enc = hf_tok(full_prompt,add_special_tokens=False,return_tensors="pt",
+        truncation=False,padding=False,
     )
     enc = {k: v.to(hf_device) for k, v in enc.items()}
 
     with torch.inference_mode():
-        out = hf_model(
-            **enc,
-            output_hidden_states=True,
-            output_attentions=False,
-            return_dict=True,
-            use_cache=False,
-        )
+        out = hf_model(**enc,output_hidden_states=True,output_attentions=False,return_dict=True,use_cache=False,)
 
     hidden_states = out.hidden_states
     if hidden_states is None:
@@ -373,10 +370,7 @@ def get_attention_scores(
 
     model_type = _infer_attention_model_type(hf_model)
     query_states, key_states, causal_mask, head_dim = _project_qk_last_layer(
-        hf_model,
-        hidden_states,
-        model_type=model_type,
-    )
+        hf_model,hidden_states,model_type=model_type,)
 
     q_start = q_token_indices[0]
     q_end = q_token_indices[-1] + 1
@@ -403,10 +397,7 @@ def _label_from_stats(st: Dict[str, Any]) -> str:
     return "true" if float(st["p_true"]) > 0.5 else "false"
 
 
-def _first_flip_idx(
-    baseline_stats: Dict[str, Any],
-    masked_stats: List[Dict[str, Any]],
-) -> Optional[int]:
+def _first_flip_idx(baseline_stats: Dict[str, Any],masked_stats: List[Dict[str, Any]],) -> Optional[int]:
     base_lab = _label_from_stats(baseline_stats)
     for i, st in enumerate(masked_stats):
         if _label_from_stats(st) != base_lab:
@@ -468,12 +459,9 @@ def _rewrite_chunked_step_metadata(masked_stats: List[Dict[str, Any]], *, step_o
 
 
 
-def _write_compute_probs_flip_log(
-    file_name: str,
-    *,
-    masked_prompts: Sequence[str],
-    masked_stats: Sequence[Dict[str, Any]],
-) -> None:
+def _write_compute_probs_flip_log(file_name: str,*,masked_prompts: Sequence[str],
+    masked_stats: Sequence[Dict[str, Any]],) -> None:
+
     """
     Recreate the lightweight compute_probs flip log for the chunked execution path.
 
@@ -498,26 +486,115 @@ def _write_compute_probs_flip_log(
     step0 = int(st.get("step_index", flip_idx + 1)) - 1
 
     with p.open("w", encoding="utf-8") as f:
-        f.write(
-            f"[{step0}] logP_true={float(st['logP_true']):.4f} "
-            f"logP_false={float(st['logP_false']):.4f} "
-            f"log_odds={float(st['log_odds']):.4f} "
-            f"p_true={float(st['p_true']):.6f}\n\n"
-        )
+        f.write(f"[{step0}] logP_true={float(st['logP_true']):.4f} "
+            f"logP_false={float(st['logP_false']):.4f} "f"log_odds={float(st['log_odds']):.4f} "f"p_true={float(st['p_true']):.6f}\n\n")
         f.write(f"After {step0} iterations we had converted\n")
         f.write(f"The prompt:\n{masked_prompts[flip_idx]}\n")
 
 
 
-def _compute_probs_streaming_until_flip(
-    *,document: str,query: str,ordered_offsets: List[Tuple[int, int]],
+from typing import Mapping
+from RagAdaptation.core.prompting import (
+    WordUnit, InterventionMode,coerce_intervention_mode, iter_word_intervention_prompts_iterative_chunks
+
+)
+
+
+""" compute probes in words level"""
+def _compute_probs_streaming_until_flip_words(*,document: str,query: str,
+    pieces: Sequence[str],word_units: Sequence[WordUnit],
+    ordered_word_ids: Sequence[int],intervention_mode: InterventionMode,
+    replacement_map: Optional[Mapping[Any, str]],
+    change_template_contextCite: bool,hf_model,hf_tok, hf_device,true_variants, false_variants,
+    compute_probs_file_name: str,p_true_flipping: bool,save_logs: bool,
+    chunk_size: int = 32,checkpoint_path: Optional[str] = None,
+    checkpoint_every: int = 32,checkpoint_payload_base: Optional[Dict[str, Any]] = None,):
+
+    masked_prompts_acc: List[str] = []
+    masked_contexts_acc: List[str] = []
+    masked_stats_acc: List[Dict[str, Any]] = []
+    masked_logps_acc: List[float] = []
+
+    step_offset = 0
+    stopped_early = False
+
+    def save_stream_checkpoint(status: str) -> None:
+        if not checkpoint_path:
+            return
+
+        base = dict(checkpoint_payload_base or {})
+        base.update({
+            "status": status,
+            "stage": "word_intervention_streaming",
+            "intervention_mode": coerce_intervention_mode(intervention_mode).name,
+            "steps_scored": int(step_offset),
+            "total_candidate_steps": int(len(ordered_word_ids)),
+            "masked_stats": masked_stats_acc,
+            "masked_logps": masked_logps_acc,
+            "stopped_early": bool(stopped_early),
+        })
+        _write_masking_checkpoint(checkpoint_path, base)
+
+    for prompt_chunk, context_chunk in iter_word_intervention_prompts_iterative_chunks(document,query,pieces=pieces,word_units=word_units,ordered_word_ids=ordered_word_ids,
+        intervention_mode=intervention_mode,replacement_map=replacement_map,change_template_contextCite=change_template_contextCite,chunk_size=chunk_size,):
+
+        chunk_stats, chunk_logps = compute_probs(
+            hf_model,hf_tok,
+            prompt_chunk,hf_device,
+            None,batch_size=2,
+            return_full_logp=True,
+            file_name=compute_probs_file_name,
+            detect_flip_to_true=p_true_flipping,
+            true_variants=true_variants,
+            false_variants=false_variants,
+            save_file=False,stop_on_flip=True,
+        )
+
+        _rewrite_chunked_step_metadata(chunk_stats, step_offset=step_offset)
+
+        effective_steps = len(chunk_stats)
+        masked_prompts_acc.extend(prompt_chunk[:effective_steps])
+        masked_contexts_acc.extend(context_chunk[:effective_steps])
+        masked_stats_acc.extend(chunk_stats)
+
+        if chunk_logps is not None:
+            masked_logps_acc.extend(chunk_logps[:effective_steps])
+
+        step_offset += effective_steps
+
+        if checkpoint_path and (
+            step_offset % max(1, checkpoint_every) == 0
+            or effective_steps < len(prompt_chunk)
+        ):
+            save_stream_checkpoint("running")
+
+        if effective_steps < len(prompt_chunk):
+            stopped_early = True
+            save_stream_checkpoint("stopped_early")
+            break
+
+    if save_logs:
+        _write_compute_probs_flip_log(
+            compute_probs_file_name,
+            masked_prompts=masked_prompts_acc,
+            masked_stats=masked_stats_acc,
+        )
+
+    save_stream_checkpoint("completed")
+
+    return (
+        masked_prompts_acc,
+        masked_contexts_acc,
+        masked_stats_acc,
+        masked_logps_acc,
+        stopped_early,
+    )
+
+"""Token Level COMPUTE PROBES"""
+def _compute_probs_streaming_until_flip(*,document: str,query: str,ordered_offsets: List[Tuple[int, int]],
     change_template_contextCite: bool,hf_model,hf_tok,hf_device,
-    true_variants,false_variants,compute_probs_file_name: str,
-    p_true_flipping: bool,save_logs: bool,chunk_size: int = 32,
-    checkpoint_path: Optional[str] = None,
-    checkpoint_every: int = 32,
-    checkpoint_payload_base: Optional[Dict[str, Any]] = None,
-):
+    true_variants,false_variants,compute_probs_file_name: str,p_true_flipping: bool,save_logs: bool,chunk_size: int = 32,
+    checkpoint_path: Optional[str] = None,checkpoint_every: int = 32,checkpoint_payload_base: Optional[Dict[str, Any]] = None,):
     """
     Stream masked prompts chunk-by-chunk until compute_probs finds a flip.
 
@@ -555,21 +632,12 @@ def _compute_probs_streaming_until_flip(
         document,query,ordered_offsets,change_template_contextCite=change_template_contextCite,
         chunk_size=chunk_size,):
 
-        chunk_stats, chunk_logps = compute_probs(
-            hf_model,
-            hf_tok,
-            prompt_chunk,
-            hf_device,
-            None,
-            batch_size=2,
-            return_full_logp=True,
-            file_name=compute_probs_file_name,
+        chunk_stats, chunk_logps = compute_probs(hf_model,hf_tok,prompt_chunk,hf_device,
+            None,batch_size=2,
+            return_full_logp=True,file_name=compute_probs_file_name,
             detect_flip_to_true=p_true_flipping,
             true_variants=true_variants,
-            false_variants=false_variants,
-            save_file=False,
-            stop_on_flip=True,
-        )
+            false_variants=false_variants,save_file=False,stop_on_flip=True,)
 
         _rewrite_chunked_step_metadata(chunk_stats, step_offset=step_offset)
 
@@ -594,9 +662,7 @@ def _compute_probs_streaming_until_flip(
             break
 
     if save_logs:
-        _write_compute_probs_flip_log(
-            compute_probs_file_name,
-            masked_prompts=masked_prompts_acc,
+        _write_compute_probs_flip_log(compute_probs_file_name,masked_prompts=masked_prompts_acc,
             masked_stats=masked_stats_acc,
         )
     save_stream_checkpoint("completed")
@@ -680,43 +746,26 @@ def dump_masked_prompts_json(out_path: str,*,query: str,baseline_prompt: str,
     return out_path
 
 
-def mask_by_order(full_context: str,query: str,
-    model_con: model_config.ModelConfig = None,
-    *,scores: Optional[Sequence[torch.Tensor]] = None,
-    rng: Optional[np.random.Generator] = None,compute_probs_file_name: str = "output_compute_probs.txt",
-    p_true_flipping=False, dump_json_path: Optional[str] = None,
-    dump_policy: str = "flip",dump_window: int = 1,
-    source_offsets: Optional[List[Tuple[int, int]]] = None,
-    force_class_prompt: Optional[bool] = None,baseline_stats: Optional[Dict[str, Any]] = None,stop_scores_relative: Optional[float] = 0,
-    save_logs:bool=True, stop_on_flip:bool =False,
-    checkpoint_path: Optional[str] = None,
-    checkpoint_every: int = 32,
-):
+def mask_by_order(full_context: str,query: str,model_con: model_config.ModelConfig = None,*,scores: Optional[Sequence[torch.Tensor]] = None,
+    rng: Optional[np.random.Generator] = None,compute_probs_file_name: str = "output_compute_probs.txt",p_true_flipping=False, dump_json_path: Optional[str] = None,dump_policy: str = "flip",dump_window: int = 1,
+    source_offsets: Optional[List[Tuple[int, int]]] = None,force_class_prompt: Optional[bool] = None,baseline_stats: Optional[Dict[str, Any]] = None,stop_scores_relative: Optional[float] = 0,
+    save_logs:bool=True, stop_on_flip:bool =False,checkpoint_path: Optional[str] = None,checkpoint_every: int = 32,
+    intervention_mode: InterventionMode | str = InterventionMode.MASK_TOKEN,
+    replacement_map: Optional[Mapping[Any, str]] = None, ):
+
     hf_model, hf_tok, hf_device = model_con.load()
     true_variants = model_con.get_true_variants()
     false_variants = model_con.get_false_variants()
 
-    full_prompt = model_con.format_prompt(
-        question=query,
-        context=full_context,
-        context_cite_at2_formating=False,
-    )
+    full_prompt = model_con.format_prompt(question=query,context=full_context,context_cite_at2_formating=False,)
 
-    enc_full = hf_tok(
-        full_prompt,
-        add_special_tokens=False,
-        return_offsets_mapping=True,
-        truncation=True,
-        padding=False,
-    )
+    enc_full = hf_tok(full_prompt,add_special_tokens=False,return_offsets_mapping=True,truncation=True,padding=False,)
 
     offsets_full = enc_full["offset_mapping"]
     if hasattr(offsets_full, "tolist"):
         offsets_full = offsets_full.tolist()
 
-    ctx_token_indices, ctx_rel_offsets_prompt, after_ctx = find_token_indices_by_substring(
-        full_prompt, full_context, offsets_full, start_search_at=0
-    )
+    ctx_token_indices, ctx_rel_offsets_prompt, after_ctx = find_token_indices_by_substring(full_prompt, full_context, offsets_full, start_search_at=0)
 
     ctx_rel_offsets = ctx_rel_offsets_prompt
     scores_vec: Optional[np.ndarray] = None
@@ -727,9 +776,7 @@ def mask_by_order(full_context: str,query: str,
 
     if scores is not None:
         if isinstance(scores, (list, tuple)) and len(scores) > 0 and torch.is_tensor(scores[0]):
-            q_token_indices, _, _ = find_token_indices_by_substring(
-                full_prompt, query, offsets_full, start_search_at=after_ctx
-            )
+            q_token_indices, _, _ = find_token_indices_by_substring(full_prompt, query, offsets_full, start_search_at=after_ctx)
 
             last = scores[-1]
             last_avg = last[0].mean(dim=0)
@@ -772,6 +819,150 @@ def mask_by_order(full_context: str,query: str,
         threshold = max_val * stop_scores_relative
         order = [i for i in order if scores_vec[i] >= threshold]
 
+
+    mode = coerce_intervention_mode(intervention_mode)
+
+    # ------------------------------------------------------------------
+    # Word-level intervention path.
+    # Important: this path does NOT aggregate token scores into word scores.
+    # Scores must already be word-level, or source_offsets must map one-to-one
+    # to word units.
+    # ------------------------------------------------------------------
+    if mode != InterventionMode.MASK_TOKEN:
+        pieces, word_units, ordered_word_ids, pick_scores_all = build_word_candidates_no_aggregation(
+            context=full_context,
+            scores_vec=scores_vec,
+            source_offsets=ctx_rel_offsets if source_offsets is not None else None,
+            rng=rng,
+        )
+
+        ordered_word_ids, pick_scores_all = _filter_word_order_by_available_intervention(
+            word_units=word_units,
+            order=ordered_word_ids,
+            pick_scores=pick_scores_all,
+            mode=mode,
+            replacement_map=replacement_map,
+        )
+
+        order_list_all = [int(i) for i in ordered_word_ids]
+
+        if checkpoint_path:
+            _write_masking_checkpoint(
+                checkpoint_path,
+                {
+                    "status": "started",
+                    "stage": "mask_by_order_word_intervention",
+                    "intervention_mode": mode.name,
+                    "query": query,
+                    "p_true_flipping": bool(p_true_flipping),
+                    "total_candidate_steps": int(len(order_list_all)),
+                    "order": order_list_all,
+                    "scores_at_pick": pick_scores_all,
+                },
+            )
+
+        if stop_on_flip:
+            (masked_prompts,masked_context_list,masked_stats,masked_logps,_stopped_early,) = (
+                _compute_probs_streaming_until_flip_words(
+                document=full_context,query=query,pieces=pieces, word_units=word_units,ordered_word_ids=ordered_word_ids,
+                intervention_mode=mode,replacement_map=replacement_map,change_template_contextCite=change_template_contextCite,
+                hf_model=hf_model,hf_tok=hf_tok,hf_device=hf_device,true_variants=true_variants, false_variants=false_variants,
+                compute_probs_file_name=compute_probs_file_name,p_true_flipping=p_true_flipping,save_logs=save_logs,
+                checkpoint_path=checkpoint_path,checkpoint_every=checkpoint_every,
+                checkpoint_payload_base={"query": query,"p_true_flipping": bool(p_true_flipping),
+                    "intervention_mode": mode.name,"order": order_list_all,"scores_at_pick": pick_scores_all,},))
+        else:
+            masked_prompts, masked_context_list = create_word_intervention_prompts_iterative(
+                full_context,
+                query,
+                pieces=pieces,
+                word_units=word_units,
+                ordered_word_ids=ordered_word_ids,
+                intervention_mode=mode,
+                replacement_map=replacement_map,
+                change_template_contextCite=change_template_contextCite,
+            )
+
+            masked_stats, masked_logps = compute_probs(
+                hf_model,hf_tok,masked_prompts, hf_device,
+                None,
+                batch_size=2,
+                return_full_logp=True,
+                file_name=compute_probs_file_name,
+                detect_flip_to_true=p_true_flipping,
+                true_variants=true_variants,
+                false_variants=false_variants,
+                save_file=save_logs,stop_on_flip=False,
+            )
+
+            effective_steps = len(masked_stats)
+            if effective_steps < len(masked_prompts):
+                masked_prompts = masked_prompts[:effective_steps]
+                masked_context_list = masked_context_list[:effective_steps]
+
+        effective_steps = len(masked_stats)
+        order = order_list_all[:effective_steps]
+
+        if dump_json_path and save_logs:
+            pick_scores = None
+            if pick_scores_all is not None:
+                pick_scores = pick_scores_all[:effective_steps]
+
+            if baseline_stats is None:
+                baseline_stats = compute_probs(
+                    hf_model,
+                    hf_tok,
+                    [full_prompt],
+                    hf_device,
+                    expected_result=None,
+                    batch_size=1,
+                    return_full_logp=True,
+                    file_name=compute_probs_file_name + ".baseline_tmp",
+                    detect_flip_to_true=p_true_flipping,
+                    true_variants=true_variants,
+                    false_variants=false_variants,
+                    save_file=False,
+                    stop_on_flip=False,
+                )[0][0]
+
+            dump_masked_prompts_json(
+                dump_json_path,
+                query=query,
+                baseline_prompt=full_prompt,
+                baseline_stats=baseline_stats,
+                masked_prompts=masked_prompts,
+                masked_stats=masked_stats,
+                masked_context_list=masked_context_list,
+                order=order,
+                scores_at_pick=pick_scores,
+                policy=dump_policy,
+                window=dump_window,
+            )
+
+        if checkpoint_path:
+            final_pick_scores = None
+            if pick_scores_all is not None:
+                final_pick_scores = pick_scores_all[:effective_steps]
+
+            _write_masking_checkpoint(
+                checkpoint_path,
+                {
+                    "status": "completed",
+                    "stage": "mask_by_order_word_intervention",
+                    "intervention_mode": mode.name,
+                    "query": query,
+                    "p_true_flipping": bool(p_true_flipping),
+                    "steps_scored": int(len(masked_stats)),
+                    "order": [int(i) for i in order],
+                    "scores_at_pick": final_pick_scores,
+                    "masked_stats": masked_stats,
+                    "masked_logps": masked_logps,
+                },
+            )
+
+        return masked_stats, masked_logps
+
+
     ordered_offsets = [ctx_rel_offsets[i] for i in order]
     order_list_all = [int(i) for i in list(order)]
     pick_scores_all = None
@@ -788,8 +979,7 @@ def mask_by_order(full_context: str,query: str,
                 "p_true_flipping": bool(p_true_flipping),
                 "total_candidate_steps": int(len(order_list_all)),
                 "order": order_list_all,
-                "scores_at_pick": pick_scores_all,
-            },
+                "scores_at_pick": pick_scores_all,},
         )
 
     if stop_on_flip:
@@ -816,17 +1006,10 @@ def mask_by_order(full_context: str,query: str,
             full_context,query,ordered_offsets,
             change_template_contextCite=change_template_contextCite,)
 
-        masked_stats, masked_logps = compute_probs(
-            hf_model,hf_tok,masked_prompts,hf_device,
-            None,
-            batch_size=2,return_full_logp=True,
-            file_name=compute_probs_file_name,
-            detect_flip_to_true=p_true_flipping,
-            true_variants=true_variants,
-            false_variants=false_variants,
-            save_file=save_logs,
-            stop_on_flip=False,
-        )
+        masked_stats, masked_logps = compute_probs(hf_model,hf_tok,masked_prompts,hf_device,None,
+            batch_size=2,return_full_logp=True,file_name=compute_probs_file_name,detect_flip_to_true=p_true_flipping,
+            true_variants=true_variants,false_variants=false_variants,save_file=save_logs,stop_on_flip=False,)
+
         # keep parallel arrays aligned if compute_probs stopped early on flip
         effective_steps = len(masked_stats)
         if effective_steps < len(masked_prompts):
@@ -841,15 +1024,9 @@ def mask_by_order(full_context: str,query: str,
     if dump_json_path and save_logs:
         pick_scores = None if scores_vec is None else [float(scores_vec[i]) for i in order]
         if baseline_stats is None:
-            baseline_stats = compute_probs(
-                hf_model,
-                hf_tok,
-                [full_prompt],hf_device,
-                expected_result=None,
-                batch_size=1,return_full_logp=True,
-                file_name=compute_probs_file_name + ".baseline_tmp",
-                detect_flip_to_true=p_true_flipping,
-                true_variants=true_variants,false_variants=false_variants,)[0][0]
+            baseline_stats = compute_probs(hf_model,hf_tok,[full_prompt],hf_device,expected_result=None,
+                batch_size=1,return_full_logp=True,file_name=compute_probs_file_name + ".baseline_tmp",
+                detect_flip_to_true=p_true_flipping,true_variants=true_variants,false_variants=false_variants,)[0][0]
 
         dump_masked_prompts_json(dump_json_path,query=query,
             baseline_prompt=full_prompt,baseline_stats=baseline_stats,
@@ -865,29 +1042,17 @@ def mask_by_order(full_context: str,query: str,
 
         _write_masking_checkpoint(
             checkpoint_path,
-            {
-                "status": "completed",
-                "stage": "mask_by_order",
-                "query": query,
-                "p_true_flipping": bool(p_true_flipping),
-                "steps_scored": int(len(masked_stats)),
-                "order": [int(i) for i in order],
-                "scores_at_pick": final_pick_scores,
-                "masked_stats": masked_stats,
-                "masked_logps": masked_logps,
+            {"status": "completed","stage": "mask_by_order","query": query,
+                "p_true_flipping": bool(p_true_flipping),"steps_scored": int(len(masked_stats)),"order": [int(i) for i in order],
+                "scores_at_pick": final_pick_scores,"masked_stats": masked_stats,"masked_logps": masked_logps,
             },
         )
 
     return masked_stats, masked_logps
 
 
-def _piece_matches_at(
-    context: str,
-    piece: str,
-    start: int,
-    *,
-    whitespace_flex: bool = True,
-) -> bool:
+def _piece_matches_at(context: str, piece: str,start: int,*, whitespace_flex: bool = True,) -> bool:
+
     end = start + len(piece)
     if start < 0 or end > len(context):
         return False
@@ -902,13 +1067,7 @@ def _piece_matches_at(
     return True
 
 
-def build_offsets_from_source_pieces(
-    context: str,
-    source_pieces,
-    *,
-    max_lookahead: int = 64,
-    whitespace_flex: bool = True,
-):
+def build_offsets_from_source_pieces(context: str,source_pieces,*,max_lookahead: int = 64,whitespace_flex: bool = True,):
     offsets = []
     pos = 0
     n = len(context)
@@ -947,12 +1106,7 @@ def build_offsets_from_source_pieces(
 
         if idx is None or matched_piece is None:
             sample = context[pos : min(n, pos + 120)]
-            raise ValueError(
-                f"Could not align source piece #{i} to context.\n"
-                f"piece={piece!r}\n"
-                f"search_start={pos}\n"
-                f"max_lookahead={max_lookahead}\n"
-                f"context_sample_after_pos={sample!r}"
+            raise ValueError(f"Could not align source piece #{i} to context.\n"f"piece={piece!r}\n"f"search_start={pos}\n"f"max_lookahead={max_lookahead}\n"f"context_sample_after_pos={sample!r}"
             )
 
         end = idx + len(matched_piece)
@@ -962,15 +1116,8 @@ def build_offsets_from_source_pieces(
     return offsets
 
 
-#at2 habdling
-def _align_source_text_to_context(
-    context: str,
-    piece: str,
-    pos: int,
-    *,
-    max_lookahead: int = 64,
-    whitespace_flex: bool = True,
-):
+#at2 handling
+def _align_source_text_to_context( context: str,piece: str, pos: int, *,max_lookahead: int = 64,whitespace_flex: bool = True,):
     """
     Try to align one source string (or a merged group of source strings)
     onto `context`, starting near `pos`.
@@ -1070,13 +1217,8 @@ def map_at2_scores_to_base_via_sources(
             group_pieces = list(source_pieces[i : i + k])
             merged_text = "".join(group_pieces)
 
-            aligned = _align_source_text_to_context(
-                context,
-                merged_text,
-                pos,
-                max_lookahead=max_lookahead,
-                whitespace_flex=whitespace_flex,
-            )
+            aligned = _align_source_text_to_context(context,merged_text,pos,max_lookahead=max_lookahead,whitespace_flex=whitespace_flex,)
+
             if aligned is None:
                 continue
 
@@ -1204,14 +1346,8 @@ def _is_device_mismatch_error(exc: BaseException) -> bool:
     )
 
 
-def get_at2_token_scores(
-    *,
-    full_context: str,
-    query: str,
-    hf_model,
-    hf_tok,
-    score_estimator_path: str | Path,
-    generate_kwargs: dict,
+def get_at2_token_scores(*, full_context: str,
+    query: str,hf_model,hf_tok,score_estimator_path: str | Path,generate_kwargs: dict,
 ):
     from at2.tasks import SimpleContextAttributionTask
     from at2 import AT2Attributor

@@ -8,7 +8,7 @@ from RagAdaptation.methods.common import get_attention_scores, mask_by_order
 from RagAdaptation.core.model_config import ModelConfig
 
 def run_attention_method(*,model_con:ModelConfig, out_dir: str, baseline_prompt: str, baseline_stats: Dict[str, Any], full_context: str, query: str, p_true_flipping: bool, dump_policy: str, dump_window: int,save_logs:bool=True, stop_on_flip: bool=False,
-                         ):
+                         intervention_mode=None):
     hf_model, hf_tok, hf_device= model_con.load()
     attn = get_attention_scores(
         hf_model,

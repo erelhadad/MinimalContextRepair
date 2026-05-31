@@ -43,6 +43,13 @@ AT2_ESTIMATOR_BY_MODEL = {
     ),
 }
 
+AT2_ESTIMATOR_BY_MODEL_WORD={
+"mistralai/Mistral-7B-Instruct-v0.3": Path(),
+"microsoft/Phi-3-mini-4k-instruct": Path(),
+"Qwen/Qwen3-4B-Instruct-2507":
+    Path()
+}
+
 
 def run_at2_method(
     *,
@@ -57,6 +64,7 @@ def run_at2_method(
     dump_window: int,
     save_logs: bool = True,
     stop_on_flip: bool = False,
+intervention_mode=None
 ):
     est_path = AT2_ESTIMATOR_BY_MODEL.get(model_id)
     if est_path is None:

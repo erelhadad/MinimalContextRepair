@@ -26,4 +26,5 @@ class PipelineConfig:
     tau:float = 0.5
     epsilon:float = 1e-2
     k:int = 5
+    intervention_mode:str="mask_token"
 

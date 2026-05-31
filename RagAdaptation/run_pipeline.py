@@ -37,6 +37,7 @@ def main():
     ap.add_argument("--tau",type=float, default=0.01)
     ap.add_argument("--epsilon",type=float, default=0.6)
     ap.add_argument("--k",type=int, default=5)
+    ap.add_argument("--intervention_mode", type=str, deafult="mask_token")
     args = ap.parse_args()
 
     config = PipelineConfig(
@@ -54,7 +55,7 @@ def main():
         examples_range=args.examples_range,
         tau=args.tau
         ,epsilon=args.epsilon,
-        k=args.k
+        k=args.k, intervention_mode=args.intervention_mode
     )
 
     run_root = run_dataset(config)

@@ -15,7 +15,7 @@ from RagAdaptation.prompts_format import TF_RAG_TEMPLATE_A2T
 from RagAdaptation.core.model_config import ModelConfig
 
 def run_context_cite_method(*,model_con:ModelConfig, out_dir: str, baseline_stats, full_context: str, query: str, p_true_flipping: bool, dump_policy: str, dump_window: int,
-                         save_logs:bool=True, stop_on_flip:bool=False   ):
+                         save_logs:bool=True, stop_on_flip:bool=False,intervention_mode=None   ):
     if ContextCiter is None:
         raise ModuleNotFoundError("context_cite is required for the context_cite method.")
 

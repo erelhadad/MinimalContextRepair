@@ -12,7 +12,7 @@ from RagAdaptation.core.documents import combine_document_text, load_documents_a
 from RagAdaptation.pipeline.config import PipelineConfig
 from RagAdaptation.prompts_format import normalize_true_false
 from RagAdaptation.core.models import cleanup_memory, unload_all_hf_models
-
+from RagAdaptation.core.prompting import coerce_intervention_mode
 
 def find_free_gpu():
     if torch.cuda.is_available():
@@ -59,10 +59,15 @@ def build_manifest(config: PipelineConfig, items_count: int) -> dict[str, Any]:
         "tau":config.tau,
         "epsilon":config.epsilon,
         "k":config.k,
+        "intervention_mode":config.intervention_mode,
     }
 
 
 def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] | None = None) -> Path:
+
+    # Intervention mode coercing
+    intervention_mode = coerce_intervention_mode(config.intervention_mode)
+
     items = load_items(config.input_path)
     run_root = create_run_root(config.output_root)
     write_manifest(run_root, build_manifest(config, len(items)))
@@ -124,6 +129,7 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
                     tau=config.tau,
                     epsilon=config.epsilon,
                     k=config.k,
+                    intervention_mode=intervention_mode
                 )
                 print(f"[run] ex={ex_i} model={model_id} flip_to_true={detect_flip_to_true}")
             except Exception as e:

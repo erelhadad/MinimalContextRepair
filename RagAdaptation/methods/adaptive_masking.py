@@ -11,6 +11,7 @@ import torch
 
 import RagAdaptation.core.model_config as model_config
 from RagAdaptation.compute_probs_updated import compute_probs
+from RagAdaptation.core.prompting import InterventionMode
 from RagAdaptation.methods.common import (
     _get_mask_prompt_template,
     dump_masked_prompts_json,
@@ -392,6 +393,7 @@ def mask_by_order_adaptive_combined(full_context: str,query: str,
     enable_eps_recompute: bool = False,recompute_scores_fn: Optional[Callable[[str], np.ndarray]] = None,
     adaptive_trace_path: Optional[str] = None,
     k: int = 3,epsilon: float = 1e-3, tau: float = 0.01,
+    intervention_mode: InterventionMode = InterventionMode.MASK_TOKEN,
 ):
     """
     Combined adaptive masking strategy.
@@ -604,9 +606,17 @@ def mask_by_order_adaptive_combined(full_context: str,query: str,
 
         masked_spans.append(ctx_rel_offsets[next_idx])
 
-        prompt, masked_context = _build_single_masked_prompt(document=full_context,query=query,spans=masked_spans,
-            change_template_contextCite=change_template_contextCite,
-        )
+        #here should replace/ add logic of interventions kind
+        if intervention_mode == InterventionMode.MASK_WORD or InterventionMode.MASK_TOKEN:
+            prompt, masked_context = _build_single_masked_prompt(document=full_context,query=query,spans=masked_spans,
+                change_template_contextCite=change_template_contextCite,)
+        elif intervention_mode ==InterventionMode.REPLACEMENT_ANTONYM_WORD:
+            #NEED TO REMEMBER THE OLD REPLACMENTS
+            pass
+        elif intervention_mode ==InterventionMode.REPLACEMENT_NEUTRAL_WORD:
+            # NEED TO REMEMBER THE OLD REPLACMENTS
+            pass
+
 
         stats_chunk, logps_chunk = compute_probs(
             hf_model,hf_tok,[prompt],hf_device,None,
@@ -626,6 +636,7 @@ def mask_by_order_adaptive_combined(full_context: str,query: str,
 
         trace.append(
             {
+                "intervention_mode": intervention_mode,
                 "step": len(selected_order),
                 "chosen_idx": int(next_idx),
                 "score_at_pick": float(scores_at_pick[-1]),

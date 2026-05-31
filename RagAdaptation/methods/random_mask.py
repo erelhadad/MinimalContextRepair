@@ -8,7 +8,8 @@ from RagAdaptation.core.plotting import create_p_true_function
 from RagAdaptation.methods.common import mask_by_order
 from RagAdaptation.core.model_config import ModelConfig
 
-def run_random_method(*,model_con:ModelConfig, out_dir: str, baseline_stats, full_context: str, query: str, seeds: list[int], p_true_flipping: bool, dump_policy: str, dump_window: int, save_logs:bool=True, stop_on_flip:bool=False):
+def run_random_method(*,model_con:ModelConfig, out_dir: str, baseline_stats, full_context: str, query: str, seeds: list[int], p_true_flipping: bool, dump_policy: str, dump_window: int, save_logs:bool=True, stop_on_flip:bool=False,
+                      intervention_mode=None):
     results = {}
     for seed in seeds:
         start_time= time.perf_counter_ns()

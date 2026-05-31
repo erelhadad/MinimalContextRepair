@@ -7,7 +7,7 @@ from RagAdaptation.core.model_config import ModelConfig
 
 
 def run_recompute_method(*,model_con:ModelConfig, out_dir: str, rec_method: str, model_id: str, full_context: str, query: str,p_true_flipping: bool,skip_recompute=1,
-                         save_logs:bool=True,stop_on_flip:bool=True,):
+                         save_logs:bool=True,stop_on_flip:bool=True,intervention_mode=None):
     from RagAdaptation.baseline.mask_iter_recompute_attention import mask_by_order_recompute
     # from RagAdaptation.core.models import get_hf_scorer_single_device
 

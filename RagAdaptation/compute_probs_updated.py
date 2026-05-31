@@ -132,6 +132,7 @@ def _score_variants_sequential(model,prompt_id_lists: List[List[int]],variant_to
 
     return scores
 
+from RagAdaptation.core.prompting import InterventionMode
 
 @torch.no_grad()
 def compute_probs( model,tok,prompts: List[str],
@@ -143,7 +144,8 @@ def compute_probs( model,tok,prompts: List[str],
     false_variants: Optional[List[str]] = None,
     reduction: str = "logsumexp",  # "logsumexp" or "max"
     save_file : bool = True, stop_on_flip  : bool = False,
-):
+    intervention_mode:InterventionMode=1):
+
     """
     General class scorer for binary true/false answers.
 
@@ -202,10 +204,6 @@ def compute_probs( model,tok,prompts: List[str],
     row_batch_size = max(1, int(batch_size))
     flag_flip_stop=False
     n=len(prompts)
-    flag_seq_flip=False
-    seq_flip=int(n/100) if n>=1000 else int(n/10)
-    generate_and_ptrue_agree= False
-    pass_no_flip=10
 
     for i in range(0, n , batch_size):
             chunk = prompts[i : i + batch_size]
@@ -216,12 +214,9 @@ def compute_probs( model,tok,prompts: List[str],
             ]
 
             all_scores = _score_variants_sequential(
-                model=model,
-                prompt_id_lists=prompt_id_lists,
+                model=model,prompt_id_lists=prompt_id_lists,
                 variant_token_seqs=all_cands,
-                device=device,
-                row_batch_size=row_batch_size,
-                pad_token_id=pad_token_id,
+                device=device,row_batch_size=row_batch_size,pad_token_id=pad_token_id,
             )  # [B, K_true + K_false]
 
             true_logps = all_scores[:, :num_true]   # [B, Kt]
