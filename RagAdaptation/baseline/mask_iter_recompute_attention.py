@@ -45,11 +45,7 @@ _HF_MODEL = None
 
 
 def _find_token_indices_by_substring(
-    full_text: str,
-    substring: str,
-    offsets_mapping: Sequence[Tuple[int, int]],
-    start_search_at: int = 0,
-):
+    full_text: str,substring: str,offsets_mapping: Sequence[Tuple[int, int]],start_search_at: int = 0,):
     """
     Returns:
       (token_indices, relative_offsets_in_substring, end_char_pos_in_full_text)

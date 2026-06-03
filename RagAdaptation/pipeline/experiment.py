@@ -13,38 +13,24 @@ from RagAdaptation.methods import (
     run_random_method,
     run_recompute_method,
     run_attention_flow_method,
-
-    run_attention_ptrue_tie_method,
-    run_context_cite_ptrue_tie_method,
-    run_at2_ptrue_tie_method,
-
-    run_attention_eps_recompute_method,
-    run_context_cite_eps_recompute_method,
-    run_at2_eps_recompute_method,
-
     run_attention_combined_method,
     run_context_cite_combined_method,
     run_at2_combined_method,
 )
 import RagAdaptation.core.model_config as Model_Config
-from RagAdaptation.pipeline.runner import _is_cuda_oom
-from RagAdaptation.core.prompting import InterventionMode
-def run_full_pipeline(*, model_id: str,
-    query: str, full_context: str,
-    methods: List[str],
-    seeds: Optional[List[int]] = None,
-    out_dir: str = "runs",
-    detect_flip_to_true: bool = False,
-    dump_policy: str = "flip",
-    dump_window: int = 1,
-    recompute: Optional[List[str]] = None,
-    skip_recompute: List[int] = None,
-    save_logs: bool = True,
+from RagAdaptation.core.timing import TimingRecorder
+from RagAdaptation.core.prompting import InterventionMode, coerce_intervention_mode
+from RagAdaptation.core.replacements import ReplacementResolver
+
+def run_full_pipeline(*, model_id: str,query: str, full_context: str,
+    methods: List[str],seeds: Optional[List[int]] = None, out_dir: str = "runs",
+    detect_flip_to_true: bool = False, dump_policy: str = "flip", dump_window: int = 1,
+    recompute: Optional[List[str]] = None, skip_recompute: List[int] = None, save_logs: bool = True,
     stop_on_flip: bool = False,
-    tau: float = 0.01,
-    epsilon: float = 0.6,
-    k: int = 5,
-    intervention_mode:InterventionMode=1
+    tau: float = 0.01,epsilon: float = 0.6,k: int = 5,
+    intervention_mode:InterventionMode=1, replacement_cache: str | None = None,
+    neutral_model: str = "gpt-4o-mini", conceptnet_min_weight: float = 1.0,
+    prefer_at2_word_scorer: bool = False,running_env:str="local",
 ):
 
     model_config = Model_Config.ModelConfig(model_id)
@@ -56,26 +42,41 @@ def run_full_pipeline(*, model_id: str,
     )
 
     baseline_dir = method_dir(out_dir, "baseline")
-    baseline_stats_list, _ = compute_probs(
-        hf_model, hf_tok,
-        [baseline_prompt],
-        hf_device,None,
-        batch_size=1,return_full_logp=True,
-        file_name=str(baseline_dir / f"compute_probs_{model_id}.txt"),
-        detect_flip_to_true=detect_flip_to_true,
-        true_variants=true_variants,
-        false_variants=false_variants,
-        save_file=save_logs,
-        stop_on_flip=stop_on_flip,
-    )
+    timing = TimingRecorder()
+
+    with timing.section("baseline_compute_probs"):
+        baseline_stats_list, _ = compute_probs(
+            hf_model, hf_tok,
+            [baseline_prompt],
+            hf_device, None,
+            batch_size=1,
+            return_full_logp=True,
+            file_name=str(baseline_dir / f"compute_probs_{model_id}.txt"),
+            detect_flip_to_true=detect_flip_to_true,
+            true_variants=true_variants,
+            false_variants=false_variants,
+            save_file=save_logs,
+            stop_on_flip=stop_on_flip,
+        )
+
     baseline_stats = baseline_stats_list[0]
+    mode = coerce_intervention_mode(intervention_mode)
+    replacement_resolver = ReplacementResolver(
+        cache_path=replacement_cache,
+        neutral_model=neutral_model,
+        conceptnet_min_weight=conceptnet_min_weight,
+    )
 
     results = {
         "model_id": model_id,
         "query": query,
-        "intervention_mode" :intervention_mode,
+        "intervention_mode": mode.name,
         "p_true_flipping": detect_flip_to_true,
-        "baseline": {"prompt": baseline_prompt, "stats": baseline_stats},
+        "baseline": {
+            "prompt": baseline_prompt,
+            "stats": baseline_stats,
+            "timing": timing.to_dict(),
+        },
         "methods": {},
     }
 
@@ -98,22 +99,27 @@ def run_full_pipeline(*, model_id: str,
             continue
         try:
             if method_name == "attention":
-                method_time = time.perf_counter()
-                results["methods"]["attention"] = run_attention_method(
-                    model_con=model_config,
-                    out_dir=out_dir,
-                    baseline_prompt=baseline_prompt,
-                    baseline_stats=baseline_stats,
-                    full_context=full_context,
-                    query=query,
-                    p_true_flipping=detect_flip_to_true,
-                    dump_policy=dump_policy,
-                    dump_window=dump_window,
-                    save_logs=save_logs,
-                    stop_on_flip=stop_on_flip,
-                    intervention_mode=intervention_mode
-                )
-                results["methods"]["attention"]["time"] = time.perf_counter() - method_time
+                method_timer = TimingRecorder()
+
+                with method_timer.section("method_total"):
+                    results["methods"]["attention"] = run_attention_method(
+                        model_con=model_config,
+                        out_dir=out_dir,
+                        baseline_prompt=baseline_prompt,
+                        baseline_stats=baseline_stats,
+                        full_context=full_context,
+                        query=query,
+                        p_true_flipping=detect_flip_to_true,
+                        dump_policy=dump_policy,
+                        dump_window=dump_window,
+                        save_logs=save_logs,
+                        stop_on_flip=stop_on_flip,
+                        intervention_mode=mode,
+                        replacement_resolver=replacement_resolver,
+                    )
+                results["methods"]["attention"].setdefault("timing", {})
+                results["methods"]["attention"]["timing"]["outer"] = method_timer.to_dict()
+
                 save_partial()
 
             elif method_name == "attention_flow":
@@ -129,7 +135,7 @@ def run_full_pipeline(*, model_id: str,
                     dump_window=dump_window,
                     save_logs=save_logs,
                     stop_on_flip=stop_on_flip,
-                    intervention_mode=intervention_mode
+                    intervention_mode=mode
                 )
                 results["methods"]["attention_flow"]["time"] = time.perf_counter() - method_time
                 save_partial()
@@ -147,47 +153,59 @@ def run_full_pipeline(*, model_id: str,
                     dump_window=dump_window,
                     save_logs=save_logs,
                     stop_on_flip=stop_on_flip,
-                    intervention_mode=intervention_mode
+                    intervention_mode=mode,
+                    replacement_resolver=replacement_resolver,
                 )
                 save_partial()
 
             elif method_name == "context_cite":
-                method_time = time.perf_counter()
-                results["methods"]["context_cite"] = run_context_cite_method(
-                    model_con=model_config,out_dir=out_dir,
-                    baseline_stats=baseline_stats,
-                    full_context=full_context,
-                    query=query,p_true_flipping=detect_flip_to_true,
-                    dump_policy=dump_policy,dump_window=dump_window,
-                    save_logs=save_logs,stop_on_flip=stop_on_flip,
-                    intervention_mode=intervention_mode)
+                method_timer = TimingRecorder()
 
-                results["methods"]["context_cite"]["time"] = time.perf_counter() - method_time
+                with method_timer.section("method_total"):
+                    results["methods"]["context_cite"] = run_context_cite_method(
+                        model_con=model_config,out_dir=out_dir,
+                        baseline_stats=baseline_stats,
+                        full_context=full_context,
+                        query=query,p_true_flipping=detect_flip_to_true,
+                        dump_policy=dump_policy,dump_window=dump_window,
+                        save_logs=save_logs,stop_on_flip=stop_on_flip,
+                        intervention_mode=mode,
+                        replacement_resolver=replacement_resolver)
+
+                results["methods"]["context_cite"].setdefault("timing", {})
+                results["methods"]["context_cite"]["timing"]["outer"] = method_timer.to_dict()
                 save_partial()
 
             elif method_name == "at2":
-                method_time = time.perf_counter()
-                results["methods"]["at2"] = run_at2_method(
-                    model_con=model_config,
-                    out_dir=out_dir,
-                    baseline_stats=baseline_stats,
-                    model_id=model_id,
-                    full_context=full_context,
-                    query=query,
-                    p_true_flipping=detect_flip_to_true,
-                    dump_policy=dump_policy,
-                    dump_window=dump_window,
-                    save_logs=save_logs,
-                    stop_on_flip=stop_on_flip,
-                    intervention_mode=intervention_mode
-                )
-                results["methods"]["at2"]["time"] = time.perf_counter() - method_time
+                method_timer= TimingRecorder()
+                with method_timer.section("method_total"):
+
+                    results["methods"]["at2"] = run_at2_method(
+                        model_con=model_config,
+                        out_dir=out_dir,
+                        baseline_stats=baseline_stats,
+                        model_id=model_id,
+                        full_context=full_context,
+                        query=query,
+                        p_true_flipping=detect_flip_to_true,
+                        dump_policy=dump_policy,
+                        dump_window=dump_window,
+                        save_logs=save_logs,
+                        stop_on_flip=stop_on_flip,
+                        intervention_mode=mode,
+                        replacement_resolver=replacement_resolver,
+                        prefer_at2_word_scorer=prefer_at2_word_scorer,
+                    )
+                results["methods"]["at2"].setdefault("timing", {})
+                results["methods"]["at2"]["timing"]["outer"] = method_timer.to_dict()
                 save_partial()
 
             # combined beam and adaptive recompute methods
             elif method_name == "attention_combined":
-                method_time = time.perf_counter()
-                results["methods"]["attention_combined"] = run_attention_combined_method(
+                method_timer = TimingRecorder()
+
+                with method_timer.section("method_total"):
+                    results["methods"]["attention_combined"] = run_attention_combined_method(
                     model_con=model_config,
                     out_dir=out_dir,
                     baseline_prompt=baseline_prompt,
@@ -202,14 +220,18 @@ def run_full_pipeline(*, model_id: str,
                     tau=tau,
                     epsilon=epsilon,
                     k=k,
-                    intervention_mode=intervention_mode
+                    intervention_mode=mode,
+                    replacement_resolver=replacement_resolver,
                 )
-                results["methods"]["attention_combined"]["time"] = time.perf_counter() - method_time
+                results["methods"]["attention_combined"].setdefault("timing", {})
+                results["methods"]["attention_combined"]["timing"]["outer"] = method_timer.to_dict()
+
                 save_partial()
 
             elif method_name == "context_cite_combined":
-                method_time = time.perf_counter()
-                results["methods"]["context_cite_combined"] = run_context_cite_combined_method(
+                method_timer = TimingRecorder()
+                with method_timer.section("method_total"):
+                    results["methods"]["context_cite_combined"] = run_context_cite_combined_method(
                     model_con=model_config,
                     out_dir=out_dir,
                     baseline_stats=baseline_stats,
@@ -223,15 +245,18 @@ def run_full_pipeline(*, model_id: str,
                     tau=tau,
                     epsilon=epsilon,
                     k=k,
-                    intervention_mode=intervention_mode
+                    intervention_mode=mode,
+                    replacement_resolver=replacement_resolver,
 
                 )
-                results["methods"]["context_cite_combined"]["time"] = time.perf_counter() - method_time
+                results["methods"]["context_cite_combined"].setdefault("timing", {})
+                results["methods"]["context_cite_combined"]["timing"]["outer"] = method_timer.to_dict()["total_sec"]
                 save_partial()
 
             elif method_name == "at2_combined":
-                method_time = time.perf_counter()
-                results["methods"]["at2_combined"] = run_at2_combined_method(
+                method_timer = TimingRecorder()
+                with method_timer.section("method_total"):
+                    results["methods"]["at2_combined"] = run_at2_combined_method(
                     model_con=model_config,
                     out_dir=out_dir,
                     baseline_stats=baseline_stats,
@@ -246,9 +271,13 @@ def run_full_pipeline(*, model_id: str,
                     tau=tau,
                     epsilon=epsilon,
                     k=k,
-                    intervention_mode=intervention_mode
+                    intervention_mode=mode,
+                    replacement_resolver=replacement_resolver,
+                    prefer_at2_word_scorer=prefer_at2_word_scorer,
+                    running_env=running_env
                 )
-                results["methods"]["at2_combined"]["time"] = time.perf_counter() - method_time
+                results["methods"]["at2_combined"].setdefault("timing", {})
+                results["methods"]["at2_combined"]["timing"]["outer"] = method_timer.to_dict()["total_sec"]
                 save_partial()
 
             else:
@@ -266,8 +295,9 @@ def run_full_pipeline(*, model_id: str,
     if skip_recompute is not None and 1 in skip_recompute:
         for rec_method in recompute:
             try:
-                method_time = time.perf_counter()
-                result_name, payload = run_recompute_method(
+                method_timer = TimingRecorder()
+                with method_timer.section("method_total"):
+                    result_name, payload = run_recompute_method(
                     model_con=model_config,
                     out_dir=out_dir,
                     rec_method=rec_method,
@@ -277,10 +307,11 @@ def run_full_pipeline(*, model_id: str,
                     p_true_flipping=detect_flip_to_true,
                     save_logs=save_logs,
                     stop_on_flip=stop_on_flip,
-                    intervention_mode=intervention_mode
+                    intervention_mode=mode
                 )
                 results["methods"][result_name] = payload
-                results["methods"][result_name]["time"] = time.perf_counter() - method_time
+                results["methods"][result_name]["time"].setdefault("timing", {})
+                results["methods"][result_name]["time"]["outer"] = method_timer.to_dict()["total_sec"]
                 save_partial()
             except Exception as e:
                 if rec_method == "at2":
@@ -293,8 +324,9 @@ def run_full_pipeline(*, model_id: str,
         for val in skip_recompute:
             for rec_method in recompute:
                 try:
-                    method_time = time.perf_counter()
-                    result_name, payload = run_recompute_method(
+                    method_timer=TimingRecorder()
+                    with method_timer.section("method_total"):
+                        result_name, payload = run_recompute_method(
                         model_con=model_config,
                         out_dir=out_dir,
                         rec_method=rec_method,
@@ -305,11 +337,12 @@ def run_full_pipeline(*, model_id: str,
                         skip_recompute=val,
                         save_logs=save_logs,
                         stop_on_flip=stop_on_flip,
-                        intervention_mode=intervention_mode
+                        intervention_mode=mode
                     )
                     key = f"{result_name}_SR{val}"
                     results["methods"][key] = payload
-                    results["methods"][key]["time"] = time.perf_counter() - method_time
+                    results["methods"][key]["time"].setdefault("timing", {})
+                    results["methods"][key]["time"]["inner"] = method_timer.to_dict()["total_sec"]
                     save_partial()
                 except Exception as e:
                     if rec_method == "at2":

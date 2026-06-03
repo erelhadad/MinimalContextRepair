@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from RagAdaptation.core.paths import RUNS_DIR
+from RagAdaptation.core.paths import CACHE_DIR, RUNS_DIR
 from RagAdaptation.pipeline.config import PipelineConfig
 from RagAdaptation.pipeline.runner import run_dataset
 
@@ -11,8 +11,32 @@ from RagAdaptation.pipeline.runner import run_dataset
 '''
  find . -type d -name "methods" -prune -exec rm -rf {} +
 
+newton
+qwen: python -m RagAdaptation.run_pipeline --input ./outputs/reports/dataset_creation/hotpot_yesno__validation__qwen/report_flip_only__Qwen__Qwen3-4B-Instruct-2507.json --out_dir combined_word_qwen --running_env "local" --prefer_at2_word_scorer --intervention_mode mask_word --models "Qwen/Qwen3-4B-Instruct-2507" --stop_at_flip --save_logs --methods "attention_combined" "context_cite_combined" "at2_combined"
+newton reports:
 
-python -m RagAdaptation.run_pipeline --input ./outputs/reports/dataset_creation/hotpot_yesno__validation__qwen/report_flip_only__Qwen__Qwen3-4B-Instruct-2507.json --out_dir qwen_hotpot_pipe --models "Qwen/Qwen3-4B-Instruct-2507" --stop_at_flip --examples_range 24
+/home/erel.hadad/MinimalContextRepair/outputs/reports/dataset_creation/Phi_full_dataset_reports/report_flip_only__microsoft__Phi-3-mini-4k-instruct_with_context_lengths.json
+
+
+
+/home/erel.hadad/MinimalContextRepair/outputs/reports/dataset_creation/Phi_full_dataset_reports/report_flip_only__Qwen__Qwen3-4B-Instruct-2507_with_context_lengths.json
+
+
+
+/home/erel.hadad/MinimalContextRepair/outputs/reports/dataset_creation/Mistral_full_dataset_reports/report_flip_only__mistralai__Mistral-7B-Instruct-v0.3_with_context_lengths.json
+
+brit combined word
+
+qwen:  
+ python -m RagAdaptation.run_pipeline --input /data/home/erel.hadad/MinimalContextRepair/outputs/reports/dataset_creation/hotpot_yesno__validation__all__full/report_flip_only__Qwen__Qwen3-4B-Instruct-2507.json --out_dir "combined_token_log/qwen" --running_env "local" --prefer_at2_word_scorer --intervention_mode mask_token --models "Qwen/Qwen3-4B-Instruct-2507" --stop_at_flip --save_logs --methods "attention_combined" "context_cite_combined" "at2_combined" --examples_range 0 10 
+
+minstral: 
+ python -m RagAdaptation.run_pipeline --models "mistralai/Mistral-7B-Instruct-v0.3" --methods "attention_combined" "context_cite_combined" "at2_combined" --save_logs --stop_at_flip --out_dir "combined_token_log/mins" --input  /data/home/erel.hadad/MinimalContextRepair/outputs/reports/dataset_creation/hotpot_yesno__validation__all__full/report_flip_only__mistralai__Mistral-7B-Instruct-v0.3.json  --running_env "local" --prefer_at2_word_scorer --intervention_mode mask_token  --examples_range 0 10 
+
+micro:
+ python -m RagAdaptation.run_pipeline --models microsoft/Phi-3-mini-4k-instruct --methods "attention_combined" "context_cite_combined" "at2_combined" --save_logs --stop_at_flip --out_dir "combined_token_log/micro" --input /data/home/erel.hadad/MinimalContextRepair/outputs/reports/dataset_creation/hotpot_yesno__validation__all__full/report_flip_only__microsoft__Phi-3-mini-4k-instruct.json --running_env "local" --prefer_at2_word_scorer --intervention_mode mask_token --examples_range 0 10 
+
+
 '''
 
 def main():
@@ -28,8 +52,8 @@ def main():
     ap.add_argument("--methods", nargs="+", default=["attention", "random", "context_cite","at2"])
     ap.add_argument("--seeds", nargs="*", type=int, default=[0, 10, 20, 40])
     ap.add_argument("--context_field", default="context")
-    ap.add_argument("--recompute", nargs="+", default=["attention", "context_cite","at2"])
-    ap.add_argument("--skip_recompute",nargs="*", type=int, default=[5])
+    ap.add_argument("--recompute", nargs="+", default=[])
+    ap.add_argument("--skip_recompute",nargs="*", type=int, default=[])
     ap.add_argument("--skip_examples", nargs="*", type=int, default=[])
     ap.add_argument("--save_logs",  action="store_true")
     ap.add_argument("--stop_at_flip", action="store_true")
@@ -37,7 +61,12 @@ def main():
     ap.add_argument("--tau",type=float, default=0.01)
     ap.add_argument("--epsilon",type=float, default=0.6)
     ap.add_argument("--k",type=int, default=5)
-    ap.add_argument("--intervention_mode", type=str, deafult="mask_token")
+    ap.add_argument("--intervention_mode", type=str, default="mask_token")
+    ap.add_argument("--replacement_cache", type=str, default=str(CACHE_DIR / "replacement_cache.json"))
+    ap.add_argument("--neutral_model", type=str, default="gpt-4o-mini")
+    ap.add_argument("--conceptnet_min_weight", type=float, default=1.0)
+    ap.add_argument("--prefer_at2_word_scorer", action="store_true")
+    ap.add_argument("--running_env", type=str, default="local")
     args = ap.parse_args()
 
     config = PipelineConfig(
@@ -55,7 +84,13 @@ def main():
         examples_range=args.examples_range,
         tau=args.tau
         ,epsilon=args.epsilon,
-        k=args.k, intervention_mode=args.intervention_mode
+        k=args.k,
+        intervention_mode=args.intervention_mode,
+        replacement_cache=Path(args.replacement_cache),
+        neutral_model=args.neutral_model,
+        conceptnet_min_weight=args.conceptnet_min_weight,
+        prefer_at2_word_scorer=args.prefer_at2_word_scorer,
+        running_env=args.running_env
     )
 
     run_root = run_dataset(config)

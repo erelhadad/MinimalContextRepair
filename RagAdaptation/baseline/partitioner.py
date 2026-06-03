@@ -7,6 +7,9 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
     class BaseContextPartitioner:
         def __init__(self, context: str) -> None:
             self.context = context
+    SimpleContextPartitioner = BaseContextPartitioner
+
+from RagAdaptation.core.prompting import split_context_to_word_units
 
 
 class WordContextPartitioner(BaseContextPartitioner):
@@ -36,7 +39,9 @@ class WordContextPartitioner(BaseContextPartitioner):
         self.source_type = "word"
 
     #we use the utiles split_text function
-    #def split_context(self) -> None:
+    def split_context(self) -> None:
+        _pieces, word_units = split_context_to_word_units(self.context)
+        self._cache["spans"] = [(int(u.start), int(u.end)) for u in word_units]
 
 
     @property
@@ -175,5 +180,4 @@ class TokenContextPartitioner(SimpleContextPartitioner):
             # Tail after last span
             out_parts.append(self.context[prev_end:])
             return "".join(out_parts)
-
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from pathlib import Path
-from prompts_format import normalize_true_false
+from RagAdaptation.prompts_format import normalize_true_false
 
 import torch
 
@@ -270,27 +270,28 @@ def compute_probs( model,tok,prompts: List[str],
                     pass_no_flip = 10
 
                     # Generating the full response - if we report on this response we want to be sure that the actual response had changed
-                    enc = tok(prompts[i+j], return_tensors="pt", add_special_tokens=False).to(model.device)
+                    # enc = tok(prompts[i+j], return_tensors="pt", add_special_tokens=False).to(model.device)
+                    #
+                    # out_ids = model.generate(
+                    #     enc,
+                    #     max_new_tokens=20,
+                    #     do_sample=False,
+                    #     temperature=0.0,
+                    #     eos_token_id=tok.eos_token_id,
+                    #     pad_token_id=tok.pad_token_id,
+                    # )
+                    # gen_ids = out_ids[0, enc["input_ids"].shape[1]:]
+                    # generated_response= tok.decode(gen_ids, skip_special_tokens=True).strip()
+                    # norm_answer=normalize_true_false(generated_response)
+                    # generate_and_ptrue_agree= (norm_answer =="true" and p_true_out_of_true_and_false>0.5 ) or (norm_answer =="false" and p_true_out_of_true_and_false<0.5)
 
-                    out_ids = model.generate(
-                        enc,
-                        max_new_tokens=20,
-                        do_sample=False,
-                        temperature=0.0,
-                        eos_token_id=tok.eos_token_id,
-                        pad_token_id=tok.pad_token_id,
-                    )
-                    gen_ids = out_ids[0, enc["input_ids"].shape[1]:]
-                    generated_response= tok.decode(gen_ids, skip_special_tokens=True).strip()
-                    norm_answer=normalize_true_false(generated_response)
-                    generate_and_ptrue_agree= (norm_answer =="true" and p_true_out_of_true_and_false>0.5 ) or (norm_answer =="false" and p_true_out_of_true_and_false<0.5)
-
-                    if stop_on_flip and generate_and_ptrue_agree:
+                    if (stop_on_flip):
+                            #and generate_and_ptrue_agree):
                         flag_flip_stop=True
 
                     res["first_flip_index"] = first_flip_index  + 1
-                    res["generated_response"] = generated_response
-                    res["generate_and_ptrue_agree"] = generate_and_ptrue_agree
+                    # res["generated_response"] = generated_response
+                    # res["generate_and_ptrue_agree"] = generate_and_ptrue_agree
 
                     # even if we dont save for the file we still return the results
                     if save_file and log_f is not None:

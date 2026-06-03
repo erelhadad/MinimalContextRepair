@@ -29,6 +29,10 @@ from RagAdaptation.core.prompting import (
     build_word_candidates_no_aggregation,
     _filter_word_order_by_available_intervention,
 )
+from RagAdaptation.core.replacements import (
+    ReplacementResolver,
+    build_replacement_map_for_order,
+)
 from RagAdaptation.prompts_format import TF_RAG_TEMPLATE, TF_RAG_TEMPLATE_A2T
 
 
@@ -751,7 +755,8 @@ def mask_by_order(full_context: str,query: str,model_con: model_config.ModelConf
     source_offsets: Optional[List[Tuple[int, int]]] = None,force_class_prompt: Optional[bool] = None,baseline_stats: Optional[Dict[str, Any]] = None,stop_scores_relative: Optional[float] = 0,
     save_logs:bool=True, stop_on_flip:bool =False,checkpoint_path: Optional[str] = None,checkpoint_every: int = 32,
     intervention_mode: InterventionMode | str = InterventionMode.MASK_TOKEN,
-    replacement_map: Optional[Mapping[Any, str]] = None, ):
+    replacement_map: Optional[Mapping[Any, str]] = None,
+    replacement_resolver: Optional[ReplacementResolver] = None, ):
 
     hf_model, hf_tok, hf_device = model_con.load()
     true_variants = model_con.get_true_variants()
@@ -835,6 +840,24 @@ def mask_by_order(full_context: str,query: str,model_con: model_config.ModelConf
             source_offsets=ctx_rel_offsets if source_offsets is not None else None,
             rng=rng,
         )
+
+        if mode in {
+            InterventionMode.REPLACEMENT_NEUTRAL_WORD,
+            InterventionMode.REPLACEMENT_ANTONYM_WORD,
+        }:
+            replacement_map = build_replacement_map_for_order(
+                context=full_context,
+                query=query,
+                word_units=word_units,
+                ordered_word_ids=ordered_word_ids,
+                mode=mode,
+                replacement_map=replacement_map,
+                resolver=replacement_resolver,
+                hf_model=hf_model,
+                hf_tok=hf_tok,
+                hf_device=hf_device,
+                model_id=model_con.model_id,
+            )
 
         ordered_word_ids, pick_scores_all = _filter_word_order_by_available_intervention(
             word_units=word_units,
@@ -1347,7 +1370,7 @@ def _is_device_mismatch_error(exc: BaseException) -> bool:
 
 
 def get_at2_token_scores(*, full_context: str,
-    query: str,hf_model,hf_tok,score_estimator_path: str | Path,generate_kwargs: dict,
+    query: str,hf_model,hf_tok,score_estimator_path: str | Path,generate_kwargs: dict,source_type: str = "token",
 ):
     from at2.tasks import SimpleContextAttributionTask
     from at2 import AT2Attributor
@@ -1356,7 +1379,7 @@ def get_at2_token_scores(*, full_context: str,
     # This avoids disturbing model.generate on sharded models.
     task = SimpleContextAttributionTask(
         context=full_context,query=query,model=hf_model,
-        tokenizer=hf_tok,source_type="token",generate_kwargs=generate_kwargs,
+        tokenizer=hf_tok,source_type=source_type,generate_kwargs=generate_kwargs,
     )
 
     score_estimator_path = Path(score_estimator_path)

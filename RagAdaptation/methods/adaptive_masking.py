@@ -11,7 +11,17 @@ import torch
 
 import RagAdaptation.core.model_config as model_config
 from RagAdaptation.compute_probs_updated import compute_probs
-from RagAdaptation.core.prompting import InterventionMode
+from RagAdaptation.core.prompting import (
+    InterventionMode,
+    coerce_intervention_mode,
+    split_context_to_word_units,
+    build_context_with_word_interventions_metadata,
+    _filter_word_order_by_available_intervention,
+)
+from RagAdaptation.core.replacements import (
+    ReplacementResolver,
+    build_replacement_map_for_order,
+)
 from RagAdaptation.methods.common import (
     _get_mask_prompt_template,
     dump_masked_prompts_json,
@@ -40,6 +50,32 @@ def _is_flip(stat: Dict[str, Any], *, flip_to_true: bool) -> bool:
     p_true = float(stat["p_true"])
     return p_true > 0.5 if flip_to_true else p_true < 0.5
 
+def _build_single_word_intervention_prompt(
+    *,
+    pieces,
+    word_units,
+    selected_word_ids: Sequence[int],
+    query: str,
+    change_template_contextCite: bool,
+    intervention_mode: InterventionMode,
+    replacement_map=None,
+):
+    prompt_template = _get_mask_prompt_template(change_template_contextCite)
+    intervened_context, metadata = build_context_with_word_interventions_metadata(
+        pieces=pieces,
+        word_units=word_units,
+        selected_word_ids={int(i) for i in selected_word_ids},
+        mode=intervention_mode,
+        replacement_map=replacement_map,
+    )
+
+    if change_template_contextCite:
+        prompt = prompt_template.format(context=intervened_context, query=query)
+    else:
+        prompt = prompt_template.format(context=intervened_context, question=query)
+
+    return prompt, intervened_context, metadata
+
 
 def _build_single_masked_prompt(*,
     document: str,query: str,spans: Sequence[Tuple[int, int]],change_template_contextCite: bool,
@@ -62,6 +98,89 @@ def _write_adaptive_trace(path: Optional[str], trace: List[Dict[str, Any]]) -> N
     with open(path, "w", encoding="utf-8") as f:
         json.dump(trace, f, ensure_ascii=False, indent=2)
 
+def _lookup_replacement_for_trace(
+    replacement_map: Optional[Dict[Any, str]],
+    *,
+    chosen_idx: int,
+    word_unit: Any,
+) -> Optional[str]:
+    if replacement_map is None:
+        return None
+
+    candidate_keys = [
+        chosen_idx,
+        str(chosen_idx),
+        getattr(word_unit, "word", None),
+        str(getattr(word_unit, "word", "")),
+    ]
+
+    for key in candidate_keys:
+        if key is None:
+            continue
+        if key in replacement_map:
+            return replacement_map[key]
+
+    return None
+
+
+def _describe_chosen_unit_for_trace(
+    *,
+    full_context: str,
+    mode: InterventionMode,
+    chosen_idx: int,
+    ctx_rel_offsets: Sequence[Tuple[int, int]],
+    word_units: Optional[Sequence[Any]],
+    replacement_map: Optional[Dict[Any, str]],
+) -> Dict[str, Any]:
+    """
+    Return human-readable information about the unit selected at this step.
+
+    Important:
+    - Read text from full_context, not from masked_context.
+    - For word interventions, chosen_idx is a word id.
+    - For token masking, chosen_idx is a token/span id.
+    """
+    chosen_idx = int(chosen_idx)
+
+    if mode == InterventionMode.MASK_TOKEN:
+        start, end = ctx_rel_offsets[chosen_idx]
+        start, end = int(start), int(end)
+        original_text = full_context[start:end]
+
+        return {
+            "chosen_unit_type": "token_span",
+            "chosen_span": [start, end],
+            "chosen_text": original_text,
+            "chosen_text_visible": original_text.replace("\n", "\\n"),
+            "replacement_text": None,
+        }
+
+    if word_units is None:
+        raise RuntimeError("word_units is required for word-level trace description")
+
+    unit = word_units[chosen_idx]
+    start, end = int(unit.start), int(unit.end)
+
+    # Prefer the stored word text if available, but slice from full_context as a fallback.
+    original_text = getattr(unit, "text", None)
+    if original_text is None:
+        original_text = full_context[start:end]
+
+    replacement_text = _lookup_replacement_for_trace(
+        replacement_map,
+        chosen_idx=chosen_idx,
+        word_unit=unit,
+    )
+
+    return {
+        "chosen_unit_type": "word",
+        "chosen_word_id": chosen_idx,
+        "chosen_span": [start, end],
+        "chosen_text": str(original_text),
+        "chosen_text_visible": str(original_text).replace("\n", "\\n"),
+        "piece_index": getattr(unit, "piece_index", None),
+        "replacement_text": replacement_text,
+    }
 
 def _score_candidate_prompts(*,hf_model,hf_tok,hf_device,prompts: Sequence[str],
     true_variants: Sequence[str],false_variants: Sequence[str],):
@@ -79,9 +198,8 @@ def _score_candidate_prompts(*,hf_model,hf_tok,hf_device,prompts: Sequence[str],
 
 def _choose_next_idx_with_ptrue_tie(
     *,remaining: Sequence[int],
-    scores_vec: np.ndarray,masked_spans: Sequence[Tuple[int, int]],
-    ctx_rel_offsets: Sequence[Tuple[int, int]],
-    full_context: str,query: str,change_template_contextCite: bool,
+    scores_vec: np.ndarray,
+    candidate_prompt_builder: Callable[[int], Tuple[str, str]],
     hf_model,hf_tok,hf_device,true_variants: Sequence[str],false_variants: Sequence[str],
     flip_to_true: bool,tie_abs_gap: float,tie_max_candidates: int,
 ):
@@ -108,12 +226,7 @@ def _choose_next_idx_with_ptrue_tie(
     prompts: List[str] = []
     masked_contexts: List[str] = []
     for idx in bucket:
-        #adding each iteration the next index in the bucket with the already masked promts but no overlapping betweern the
-        #indcies within the bucket it self
-        spans = list(masked_spans) + [ctx_rel_offsets[idx]]
-        prompt, masked_context = _build_single_masked_prompt(document=full_context,query=query,spans=spans,
-            change_template_contextCite=change_template_contextCite,)
-
+        prompt, masked_context = candidate_prompt_builder(int(idx))
         prompts.append(prompt)
         masked_contexts.append(masked_context)
 
@@ -132,218 +245,6 @@ def _choose_next_idx_with_ptrue_tie(
         "candidate_scores": [float(scores_vec[i]) for i in bucket],
         "candidate_progress": [ float(_target_progress(st, flip_to_true=flip_to_true)) for st in cand_stats],
         "winner_index": int(bucket[best_pos]),}
-
-
-def mask_by_order_adaptive(full_context: str,query: str,model_con: model_config.ModelConfig,
-    *,scores: Optional[Sequence[torch.Tensor]] = None,
-    rng: Optional[np.random.Generator] = None,
-    compute_probs_file_name: str = "output_compute_probs.txt",
-    p_true_flipping: bool = False,dump_json_path: Optional[str] = None,
-    dump_policy: str = "flip",dump_window: int = 1,
-    source_offsets: Optional[List[Tuple[int, int]]] = None,
-    force_class_prompt: Optional[bool] = None,
-    baseline_stats: Optional[Dict[str, Any]] = None,
-    stop_scores_relative: Optional[float] = 0,
-    save_logs: bool = True,stop_on_flip: bool = False,
-    enable_ptrue_tie: bool = False,tie_abs_gap: float = 0.0,tie_rel_gap: float = 0.0,tie_max_candidates: int = 2,
-    enable_eps_recompute: bool = False,
-    recompute_epsilon: float = 0.0, recompute_patience: int = 1,recompute_scores_fn: Optional[Callable[[str], np.ndarray]] = None,
-    adaptive_trace_path: Optional[str] = None,):
-
-    hf_model, hf_tok, hf_device = model_con.load()
-    true_variants = model_con.get_true_variants()
-    false_variants = model_con.get_false_variants()
-
-    if enable_eps_recompute and recompute_scores_fn is None:
-        raise ValueError("enable_eps_recompute=True requires recompute_scores_fn")
-
-    full_prompt = model_con.format_prompt(question=query,context=full_context,context_cite_at2_formating=False,)
-
-    enc_full = hf_tok(full_prompt,add_special_tokens=False,return_offsets_mapping=True,truncation=True,padding=False,)
-
-    offsets_full = enc_full["offset_mapping"]
-    if hasattr(offsets_full, "tolist"):
-        offsets_full = offsets_full.tolist()
-
-    ctx_token_indices, ctx_rel_offsets_prompt, after_ctx = find_token_indices_by_substring(
-        full_prompt, full_context, offsets_full, start_search_at=0)
-
-    ctx_rel_offsets = ctx_rel_offsets_prompt
-    scores_vec: Optional[np.ndarray] = None
-    change_template_contextCite = False
-
-    if force_class_prompt is not None:
-        change_template_contextCite = bool(force_class_prompt)
-
-    if scores is not None:
-        if isinstance(scores, (list, tuple)) and len(scores) > 0 and torch.is_tensor(scores[0]):
-            q_token_indices, _, _ = find_token_indices_by_substring(full_prompt, query, offsets_full, start_search_at=after_ctx)
-            last = scores[-1]
-            last_avg = last[0].mean(dim=0)
-            sub = last_avg[np.ix_(q_token_indices, ctx_token_indices)]
-            scores_vec = sub.sum(axis=0).detach().float().cpu().numpy()
-            order = np.argsort(scores_vec)[::-1]
-            change_template_contextCite = False
-        else:
-            if torch.is_tensor(scores):
-                scores_vec = scores.detach().float().cpu().numpy()
-            else:
-                scores_vec = np.asarray(scores, dtype=np.float32)
-
-            if source_offsets is not None:
-                ctx_rel_offsets = source_offsets
-
-            if len(scores_vec) != len(ctx_rel_offsets):
-                raise ValueError(
-                    f"Provided non-attention scores length {len(scores_vec)} != number of masking spans {len(ctx_rel_offsets)}"
-                )
-
-            order = np.argsort(scores_vec)[::-1]
-            if force_class_prompt is None:
-                change_template_contextCite = True
-            else:
-                change_template_contextCite = bool(force_class_prompt)
-    else:
-        if rng is None:
-            rng = np.random.default_rng()
-        order = rng.permutation(len(ctx_rel_offsets))
-        scores_vec = None
-
-    if scores_vec is not None:
-        scores_vec = np.asarray(scores_vec, dtype=np.float32)
-        max_val = float(np.max(scores_vec)) if scores_vec.size else None
-    else:
-        max_val = None
-
-    if max_val is not None and stop_scores_relative is not None:
-        threshold = max_val * stop_scores_relative
-        order = [int(i) for i in order if scores_vec[i] >= threshold]
-    else:
-        order = [int(i) for i in order]
-
-    selected: set[int] = set()
-    current_order: List[int] = list(order)
-    selected_order: List[int] = []
-    scores_at_pick: List[float] = []
-    masked_spans: List[Tuple[int, int]] = []
-    masked_prompts: List[str] = []
-    masked_contexts: List[str] = []
-    masked_stats: List[Dict[str, Any]] = []
-    masked_logps: List[float] = []
-    trace: List[Dict[str, Any]] = []
-
-    plateau_count = 0
-    prev_stat: Optional[Dict[str, Any]] = None
-    step=0
-    while True:
-        step += 1
-        remaining = [int(i) for i in current_order if int(i) not in selected]
-        if not remaining:
-            break
-
-        if enable_ptrue_tie and scores_vec is not None:
-            next_idx, tie_info = _choose_next_idx_with_ptrue_tie(remaining=remaining,scores_vec=scores_vec,
-                masked_spans=masked_spans,ctx_rel_offsets=ctx_rel_offsets,
-                full_context=full_context,query=query,change_template_contextCite=change_template_contextCite,
-                hf_model=hf_model,hf_tok=hf_tok,hf_device=hf_device,true_variants=true_variants,false_variants=false_variants,
-                flip_to_true=p_true_flipping,tie_abs_gap=tie_abs_gap,tie_max_candidates=tie_max_candidates,)
-        else:
-            next_idx = int(remaining[0])
-            tie_info = {"used_ptrue_tie": False,"candidate_indices": [next_idx],
-                "candidate_scores": None if scores_vec is None else [float(scores_vec[next_idx])],
-            }
-
-        selected.add(next_idx)
-        selected_order.append(next_idx)
-        if scores_vec is not None:
-            scores_at_pick.append(float(scores_vec[next_idx]))
-        else:
-            scores_at_pick.append(float("nan"))
-
-        masked_spans.append(ctx_rel_offsets[next_idx])
-        prompt, masked_context = _build_single_masked_prompt(document=full_context,query=query,spans=masked_spans,
-            change_template_contextCite=change_template_contextCite,)
-
-        stats_chunk, logps_chunk = compute_probs(hf_model,hf_tok,
-            [prompt],hf_device,None,
-            batch_size=1,return_full_logp=True,file_name=compute_probs_file_name,detect_flip_to_true=p_true_flipping,
-            true_variants=true_variants,false_variants=false_variants,save_file=False,stop_on_flip=False,)
-
-        cur_stat = stats_chunk[0]
-        cur_logp = logps_chunk[0]
-        cur_stat["step_index"]=step
-
-        masked_prompts.append(prompt)
-        masked_contexts.append(masked_context)
-        masked_stats.append(cur_stat)
-        masked_logps.append(cur_logp)
-
-        delta = _progress_delta(prev_stat, cur_stat, flip_to_true=p_true_flipping)
-        recompute_triggered = False
-
-        if enable_eps_recompute and delta is not None:
-            if delta < recompute_epsilon:
-                plateau_count += 1
-            else:
-                plateau_count = 0
-
-            # adding recompute if the delta of the p_true is too minimal
-            if plateau_count >= recompute_patience:
-                new_scores = recompute_scores_fn(masked_context)
-                new_scores = np.asarray(new_scores, dtype=np.float32)
-                if len(new_scores) != len(ctx_rel_offsets):
-                    raise ValueError(f"Recomputed scores len={len(new_scores)} != masking spans len={len(ctx_rel_offsets)}"
-                    )
-                scores_vec = new_scores
-                remaining_after_pick = [i for i in remaining if i != next_idx and i not in selected]
-                if stop_scores_relative is not None and scores_vec.size:
-                    max_val = float(np.max(scores_vec))
-                    threshold = max_val * stop_scores_relative
-                    remaining_after_pick = [i for i in remaining_after_pick if float(scores_vec[i]) >= threshold]
-                remaining_after_pick.sort(key=lambda i: float(scores_vec[i]), reverse=True)
-                current_order = list(selected_order) + remaining_after_pick
-                recompute_triggered = True
-                plateau_count = 0
-
-        trace.append(
-            {   "step": len(selected_order),"chosen_idx": int(next_idx),
-                "score_at_pick": None if scores_vec is None else float(scores_at_pick[-1]),
-                "p_true": float(cur_stat["p_true"]),"log_odds": float(cur_stat["log_odds"]),
-                "target_progress": float(_target_progress(cur_stat, flip_to_true=p_true_flipping)),
-                "delta_progress": None if delta is None else float(delta),
-                "tie": tie_info,
-                "recompute_triggered": recompute_triggered,
-                "plateau_count_after_step": int(plateau_count),
-            }
-        )
-
-        prev_stat = cur_stat
-
-        if stop_on_flip and _is_flip(cur_stat, flip_to_true=p_true_flipping):
-            break
-
-    if dump_json_path and save_logs:
-        if baseline_stats is None:
-            baseline_stats = compute_probs(hf_model,hf_tok,
-                [full_prompt],
-                hf_device,expected_result=None,batch_size=1,
-                return_full_logp=True,file_name=compute_probs_file_name + ".baseline_tmp",
-                detect_flip_to_true=p_true_flipping,
-                true_variants=true_variants,false_variants=false_variants,
-                save_file=False,stop_on_flip=False,)[0][0]
-
-        dump_masked_prompts_json(dump_json_path,query=query,baseline_prompt=full_prompt,
-            baseline_stats=baseline_stats,masked_prompts=masked_prompts,masked_stats=masked_stats,
-            masked_context_list=masked_contexts,order=selected_order,scores_at_pick=scores_at_pick,
-            policy=dump_policy,window=dump_window,
-        )
-
-    if adaptive_trace_path and save_logs:
-        _write_adaptive_trace(adaptive_trace_path, trace)
-
-    return masked_stats, masked_logps, selected_order, scores_at_pick
-
-
 
 # masked by order adaptive combined
 def _minmax_normalize_scores(scores: Sequence[float],*,eps: float = 1e-12,) -> np.ndarray:
@@ -394,6 +295,8 @@ def mask_by_order_adaptive_combined(full_context: str,query: str,
     adaptive_trace_path: Optional[str] = None,
     k: int = 3,epsilon: float = 1e-3, tau: float = 0.01,
     intervention_mode: InterventionMode = InterventionMode.MASK_TOKEN,
+    replacement_map: Optional[Dict[Any, str]] = None,
+    replacement_resolver: Optional[ReplacementResolver] = None,
 ):
     """
     Combined adaptive masking strategy.
@@ -417,6 +320,7 @@ def mask_by_order_adaptive_combined(full_context: str,query: str,
     if k <= 0:
         raise ValueError("k must be positive")
 
+    mode = coerce_intervention_mode(intervention_mode)
     hf_model, hf_tok, hf_device = model_con.load()
     true_variants = model_con.get_true_variants()
     false_variants = model_con.get_false_variants()
@@ -445,6 +349,8 @@ def mask_by_order_adaptive_combined(full_context: str,query: str,
     )
 
     ctx_rel_offsets = ctx_rel_offsets_prompt
+    pieces = None
+    word_units = None
     change_template_contextCite = False
 
     if force_class_prompt is not None:
@@ -493,7 +399,13 @@ def mask_by_order_adaptive_combined(full_context: str,query: str,
         else:
             change_template_contextCite = bool(force_class_prompt)
 
-        #normalization
+    if mode != InterventionMode.MASK_TOKEN:
+        pieces, word_units = split_context_to_word_units(full_context)
+        word_offsets = [(int(u.start), int(u.end)) for u in word_units]
+        if source_offsets is None and len(scores_vec) == len(word_units):
+            ctx_rel_offsets = word_offsets
+
+    #normalization
     scores_vec = _minmax_normalize_scores(scores_vec)
 
     if len(scores_vec) == 0:
@@ -502,12 +414,41 @@ def mask_by_order_adaptive_combined(full_context: str,query: str,
     # Initial static order.
     order = np.argsort(scores_vec)[::-1]
 
+    if mode != InterventionMode.MASK_TOKEN and word_units is not None:
+        if mode in {
+            InterventionMode.REPLACEMENT_NEUTRAL_WORD,
+            InterventionMode.REPLACEMENT_ANTONYM_WORD,
+        }:
+            replacement_map = build_replacement_map_for_order(
+                context=full_context,
+                query=query,
+                word_units=word_units,
+                ordered_word_ids=[int(i) for i in order],
+                mode=mode,
+                replacement_map=replacement_map,
+                resolver=replacement_resolver,
+                hf_model=hf_model,
+                hf_tok=hf_tok,
+                hf_device=hf_device,
+                model_id=model_con.model_id,
+            )
+
+        filtered_order, _filtered_scores = _filter_word_order_by_available_intervention(
+            word_units=word_units,
+            order=[int(i) for i in order],
+            pick_scores=[float(scores_vec[int(i)]) for i in order],
+            mode=mode,
+            replacement_map=replacement_map,
+        )
+        order = np.asarray(filtered_order, dtype=np.int64)
+
     selected: set[int] = set()
     current_order: List[int] = [int(i) for i in order]
     selected_order: List[int] = []
     scores_at_pick: List[float] = []
 
     masked_spans: List[Tuple[int, int]] = []
+    intervention_metadata: List[Dict[str, Any]] = []
     masked_prompts: List[str] = []
     masked_contexts: List[str] = []
     masked_stats: List[Dict[str, Any]] = []
@@ -573,13 +514,33 @@ def mask_by_order_adaptive_combined(full_context: str,query: str,
             and (max(topk_scores) - min(topk_scores)) <= tau
         )
 
+        def build_candidate_prompt(candidate_idx: int) -> Tuple[str, str]:
+            candidate_order = list(selected_order) + [int(candidate_idx)]
+            if mode == InterventionMode.MASK_TOKEN:
+                spans = [ctx_rel_offsets[i] for i in candidate_order]
+                return _build_single_masked_prompt(
+                    document=full_context,
+                    query=query,
+                    spans=spans,
+                    change_template_contextCite=change_template_contextCite,
+                )
+            if pieces is None or word_units is None:
+                raise RuntimeError("word intervention state was not initialized")
+            prompt, context, _metadata = _build_single_word_intervention_prompt(
+                pieces=pieces,
+                word_units=word_units,
+                selected_word_ids=candidate_order,
+                query=query,
+                change_template_contextCite=change_template_contextCite,
+                intervention_mode=mode,
+                replacement_map=replacement_map,
+            )
+            return prompt, context
+
         if use_ptrue_tie:
             next_idx, tie_info = _choose_next_idx_with_ptrue_tie(
                 remaining=topk,scores_vec=scores_vec,
-                masked_spans=masked_spans,ctx_rel_offsets=ctx_rel_offsets,
-                full_context=full_context,
-                query=query,
-                change_template_contextCite=change_template_contextCite,
+                candidate_prompt_builder=build_candidate_prompt,
                 hf_model=hf_model,
                 hf_tok=hf_tok,
                 hf_device=hf_device,
@@ -604,19 +565,41 @@ def mask_by_order_adaptive_combined(full_context: str,query: str,
         selected_order.append(int(next_idx))
         scores_at_pick.append(float(scores_vec[next_idx]))
 
-        masked_spans.append(ctx_rel_offsets[next_idx])
+        chosen_trace_info = _describe_chosen_unit_for_trace(
+            full_context=full_context,
+            mode=mode,
+            chosen_idx=int(next_idx),
+            ctx_rel_offsets=ctx_rel_offsets,
+            word_units=word_units,
+            replacement_map=replacement_map,
+        )
 
-        #here should replace/ add logic of interventions kind
-        if intervention_mode == InterventionMode.MASK_WORD or InterventionMode.MASK_TOKEN:
-            prompt, masked_context = _build_single_masked_prompt(document=full_context,query=query,spans=masked_spans,
-                change_template_contextCite=change_template_contextCite,)
-        elif intervention_mode ==InterventionMode.REPLACEMENT_ANTONYM_WORD:
-            #NEED TO REMEMBER THE OLD REPLACMENTS
-            pass
-        elif intervention_mode ==InterventionMode.REPLACEMENT_NEUTRAL_WORD:
-            # NEED TO REMEMBER THE OLD REPLACMENTS
-            pass
+        step_intervention_metadata = None
 
+        if mode == InterventionMode.MASK_TOKEN:
+            masked_spans.append(ctx_rel_offsets[next_idx])
+            prompt, masked_context = _build_single_masked_prompt(
+                document=full_context,
+                query=query,
+                spans=masked_spans,
+                change_template_contextCite=change_template_contextCite,
+            )
+        else:
+            if pieces is None or word_units is None:
+                raise RuntimeError("word intervention state was not initialized")
+
+            prompt, masked_context, metadata = _build_single_word_intervention_prompt(
+                pieces=pieces,
+                word_units=word_units,
+                selected_word_ids=selected_order,
+                query=query,
+                change_template_contextCite=change_template_contextCite,
+                intervention_mode=mode,
+                replacement_map=replacement_map,
+            )
+
+            step_intervention_metadata = {str(k): v for k, v in metadata.items()}
+            intervention_metadata.append(step_intervention_metadata)
 
         stats_chunk, logps_chunk = compute_probs(
             hf_model,hf_tok,[prompt],hf_device,None,
@@ -636,20 +619,28 @@ def mask_by_order_adaptive_combined(full_context: str,query: str,
 
         trace.append(
             {
-                "intervention_mode": intervention_mode,
+                "intervention_mode": mode.name,
                 "step": len(selected_order),
                 "chosen_idx": int(next_idx),
+
+                **chosen_trace_info,
+
                 "score_at_pick": float(scores_at_pick[-1]),
                 "p_true": float(cur_stat["p_true"]),
                 "log_odds": float(cur_stat["log_odds"]),
-                "target_progress": float(_target_progress(cur_stat, flip_to_true=p_true_flipping) ),
+                "target_progress": float(_target_progress(cur_stat, flip_to_true=p_true_flipping)),
                 "recompute_triggered": bool(recompute_triggered_this_step),
                 "best_idx_before_recompute": int(best_idx_before_recompute),
                 "best_score_before_recompute": float(best_score_before_recompute),
                 "best_idx_before_pick": int(best_idx),
-                "best_score_before_pick": float(best_score),"topk_indices": [int(i) for i in topk],
+                "best_score_before_pick": float(best_score),
+                "topk_indices": [int(i) for i in topk],
                 "topk_scores": [float(s) for s in topk_scores],
-                "used_ptrue_tie": bool(use_ptrue_tie),"tie": tie_info,
+                "used_ptrue_tie": bool(use_ptrue_tie),
+                "tie": tie_info,
+
+                # Full intervention metadata for the whole selected set at this step.
+                "interventions": step_intervention_metadata,
             }
         )
 

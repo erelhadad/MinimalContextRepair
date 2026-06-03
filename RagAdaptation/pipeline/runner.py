@@ -58,8 +58,12 @@ def build_manifest(config: PipelineConfig, items_count: int) -> dict[str, Any]:
         "examples_range":config.examples_range,
         "tau":config.tau,
         "epsilon":config.epsilon,
-        "k":config.k,
-        "intervention_mode":config.intervention_mode,
+        "k":config.k,"intervention_mode":config.intervention_mode,
+        "replacement_cache": str(config.replacement_cache),
+        "neutral_model": config.neutral_model,
+        "conceptnet_min_weight": config.conceptnet_min_weight,
+        "prefer_at2_word_scorer": config.prefer_at2_word_scorer,
+        "running_env":config.running_env,
     }
 
 
@@ -129,7 +133,12 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
                     tau=config.tau,
                     epsilon=config.epsilon,
                     k=config.k,
-                    intervention_mode=intervention_mode
+                    intervention_mode=intervention_mode,
+                    replacement_cache=str(config.replacement_cache),
+                    neutral_model=config.neutral_model,
+                    conceptnet_min_weight=config.conceptnet_min_weight,
+                    prefer_at2_word_scorer=config.prefer_at2_word_scorer,
+                    running_env=config.running_env
                 )
                 print(f"[run] ex={ex_i} model={model_id} flip_to_true={detect_flip_to_true}")
             except Exception as e:

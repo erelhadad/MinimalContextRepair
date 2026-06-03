@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Sequence, List, Tuple, Optional
 
 from RagAdaptation.core.paths import RUNS_DIR
+from RagAdaptation.core.paths import CACHE_DIR
 
 
 @dataclass
@@ -27,4 +28,9 @@ class PipelineConfig:
     epsilon:float = 1e-2
     k:int = 5
     intervention_mode:str="mask_token"
+    replacement_cache: Path = CACHE_DIR / "replacement_cache.json"
+    neutral_model: str = "gpt-4o-mini"
+    conceptnet_min_weight: float = 1.0
+    prefer_at2_word_scorer: bool = False
+    running_env: str = "local"
 

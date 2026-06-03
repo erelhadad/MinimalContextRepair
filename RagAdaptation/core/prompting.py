@@ -333,6 +333,37 @@ def build_context_with_word_interventions(*,pieces: Sequence[str],word_units: Se
     return "".join(out)
 
 
+def build_context_with_word_interventions_metadata(*,pieces: Sequence[str],word_units: Sequence[WordUnit],selected_word_ids: Set[int],
+    mode: InterventionMode,replacement_map: Optional[Mapping[Any, str]] = None,) -> tuple[str, Dict[int, Dict[str, Any]]]:
+    """
+    Build a word-intervened context and return per-word replacement metadata.
+    """
+    mode = coerce_intervention_mode(mode)
+    context = build_context_with_word_interventions(
+        pieces=pieces,
+        word_units=word_units,
+        selected_word_ids=selected_word_ids,
+        mode=mode,replacement_map=replacement_map,
+    )
+
+    metadata: Dict[int, Dict[str, Any]] = {}
+    unit_by_id = {int(u.word): u for u in word_units}
+    for wid in selected_word_ids:
+        unit = unit_by_id[int(wid)]
+        entry: Dict[str, Any] = {
+            "original": unit.text,
+            "original_span": [int(unit.start), int(unit.end)],
+        }
+        if mode == InterventionMode.MASK_WORD:
+            entry["replacement"] = " " * len(unit.text)
+        elif mode in {InterventionMode.REPLACEMENT_NEUTRAL_WORD, InterventionMode.REPLACEMENT_ANTONYM_WORD}:
+            repl = _lookup_replacement(unit, replacement_map)
+            entry["replacement"] = None if repl is None else _preserve_case(unit.text, repl)
+        metadata[int(wid)] = entry
+
+    return context, metadata
+
+
 def iter_word_intervention_prompts_iterative_chunks(document: str,query: str,*,pieces: Sequence[str],word_units: Sequence[WordUnit],ordered_word_ids: Sequence[int],
     intervention_mode: InterventionMode,replacement_map: Optional[Mapping[Any, str]] = None,change_template_contextCite: bool = False,chunk_size: int = 32,):
     """

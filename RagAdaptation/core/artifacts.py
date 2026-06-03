@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +35,19 @@ def plots_dir(base_dir: str | Path) -> Path:
 def write_json(path: str | Path, payload: Any) -> Path:
     p = Path(path)
     ensure_dir(p.parent)
-    p.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
+    def default(obj: Any):
+        if isinstance(obj, Enum):
+            return obj.name
+        if isinstance(obj, Path):
+            return str(obj)
+        if hasattr(obj, "item"):
+            try:
+                return obj.item()
+            except Exception:
+                pass
+        raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+    p.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=default), encoding='utf-8')
     return p
 
 
