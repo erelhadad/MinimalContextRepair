@@ -269,8 +269,44 @@ def _word_has_valid_intervention(unit: WordUnit,*,mode: InterventionMode,replace
     return repl.strip().lower() != unit.text.strip().lower()
 
 
+def _invalid_word_intervention_reason(
+    unit: WordUnit,
+    *,
+    mode: InterventionMode,
+    replacement_map: Optional[Mapping[Any, str]],
+) -> Optional[str]:
+    if mode in {InterventionMode.MASK_TOKEN, InterventionMode.MASK_WORD}:
+        return None
+
+    repl = _lookup_replacement(unit, replacement_map)
+    if repl is None:
+        return "replacement_missing"
+    if repl.strip().lower() == unit.text.strip().lower():
+        return "replacement_noop"
+    return None
+
+
+def _word_intervention_exclusion_entry(
+    unit: WordUnit,
+    *,
+    reason: str,
+    details: str,
+    score_at_filter: Optional[float] = None,
+) -> Dict[str, Any]:
+    entry: Dict[str, Any] = {
+        "word_id": int(unit.word),
+        "text": unit.text,
+        "span": [int(unit.start), int(unit.end)],
+        "reason": reason,
+        "details": details,
+    }
+    if score_at_filter is not None:
+        entry["score_at_filter"] = float(score_at_filter)
+    return entry
+
+
 def _filter_word_order_by_available_intervention(*,word_units: Sequence[WordUnit],order: Sequence[int],pick_scores: Optional[Sequence[float]],
-    mode: InterventionMode,replacement_map: Optional[Mapping[Any, str]],) -> tuple[list[int], Optional[list[float]]]:
+    mode: InterventionMode,replacement_map: Optional[Mapping[Any, str]],return_exclusions: bool = False,):
     """
     For replacement modes, skip words with no available replacement.
     This avoids wasting model calls on no-op interventions.
@@ -279,11 +315,20 @@ def _filter_word_order_by_available_intervention(*,word_units: Sequence[WordUnit
 
     new_order: list[int] = []
     new_scores: list[float] = []
+    exclusions: list[Dict[str, Any]] = []
 
     for pos, wid in enumerate(order):
         unit = unit_by_id[int(wid)]
 
-        if not _word_has_valid_intervention(unit,mode=mode,replacement_map=replacement_map,):
+        reason = _invalid_word_intervention_reason(unit, mode=mode, replacement_map=replacement_map)
+        if reason is not None:
+            score_at_filter = None if pick_scores is None else float(pick_scores[pos])
+            exclusions.append(_word_intervention_exclusion_entry(
+                unit,
+                reason=reason,
+                details="No usable replacement is present in the replacement map.",
+                score_at_filter=score_at_filter,
+            ))
             continue
 
         new_order.append(int(wid))
@@ -291,7 +336,10 @@ def _filter_word_order_by_available_intervention(*,word_units: Sequence[WordUnit
         if pick_scores is not None:
             new_scores.append(float(pick_scores[pos]))
 
-    return new_order, None if pick_scores is None else new_scores
+    result = (new_order, None if pick_scores is None else new_scores)
+    if return_exclusions:
+        return result[0], result[1], exclusions
+    return result
 
 
 def build_context_with_word_interventions(*,pieces: Sequence[str],word_units: Sequence[WordUnit],selected_word_ids: Set[int],

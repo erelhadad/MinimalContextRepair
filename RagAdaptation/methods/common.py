@@ -10,6 +10,7 @@ import sys
 import numpy as np
 import torch
 import RagAdaptation.core.model_config as model_config
+from RagAdaptation.core.memory import cleanup_memory, get_memory_config
 
 
 _THIS_FILE = Path(__file__).resolve()
@@ -32,6 +33,7 @@ from RagAdaptation.core.prompting import (
 from RagAdaptation.core.replacements import (
     ReplacementResolver,
     build_replacement_map_for_order,
+    filter_replacement_order_semex,
 )
 from RagAdaptation.prompts_format import TF_RAG_TEMPLATE, TF_RAG_TEMPLATE_A2T
 
@@ -392,8 +394,7 @@ def get_attention_scores(hf_model, hf_tok,hf_device,*, full_prompt: str,full_con
     scores_vec = q_to_c.sum(dim=0).detach().float().cpu().numpy().astype(np.float32, copy=False)
 
     del out, hidden_states, query_states, key_states, causal_mask, attn_scores, attn_weights, last_layer_q_to_all, q_to_c, c_idx, enc
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    cleanup_memory()
 
     return scores_vec
 
@@ -511,6 +512,7 @@ def _compute_probs_streaming_until_flip_words(*,document: str,query: str,
     replacement_map: Optional[Mapping[Any, str]],
     change_template_contextCite: bool,hf_model,hf_tok, hf_device,true_variants, false_variants,
     compute_probs_file_name: str,p_true_flipping: bool,save_logs: bool,
+    stop_on_flip: bool = True,
     chunk_size: int = 32,checkpoint_path: Optional[str] = None,
     checkpoint_every: int = 32,checkpoint_payload_base: Optional[Dict[str, Any]] = None,):
 
@@ -551,7 +553,7 @@ def _compute_probs_streaming_until_flip_words(*,document: str,query: str,
             detect_flip_to_true=p_true_flipping,
             true_variants=true_variants,
             false_variants=false_variants,
-            save_file=False,stop_on_flip=True,
+            save_file=False,stop_on_flip=stop_on_flip,
         )
 
         _rewrite_chunked_step_metadata(chunk_stats, step_offset=step_offset)
@@ -572,7 +574,7 @@ def _compute_probs_streaming_until_flip_words(*,document: str,query: str,
         ):
             save_stream_checkpoint("running")
 
-        if effective_steps < len(prompt_chunk):
+        if stop_on_flip and effective_steps < len(prompt_chunk):
             stopped_early = True
             save_stream_checkpoint("stopped_early")
             break
@@ -598,6 +600,7 @@ def _compute_probs_streaming_until_flip_words(*,document: str,query: str,
 def _compute_probs_streaming_until_flip(*,document: str,query: str,ordered_offsets: List[Tuple[int, int]],
     change_template_contextCite: bool,hf_model,hf_tok,hf_device,
     true_variants,false_variants,compute_probs_file_name: str,p_true_flipping: bool,save_logs: bool,chunk_size: int = 32,
+    stop_on_flip: bool = True,
     checkpoint_path: Optional[str] = None,checkpoint_every: int = 32,checkpoint_payload_base: Optional[Dict[str, Any]] = None,):
     """
     Stream masked prompts chunk-by-chunk until compute_probs finds a flip.
@@ -641,7 +644,7 @@ def _compute_probs_streaming_until_flip(*,document: str,query: str,ordered_offse
             return_full_logp=True,file_name=compute_probs_file_name,
             detect_flip_to_true=p_true_flipping,
             true_variants=true_variants,
-            false_variants=false_variants,save_file=False,stop_on_flip=True,)
+            false_variants=false_variants,save_file=False,stop_on_flip=stop_on_flip,)
 
         _rewrite_chunked_step_metadata(chunk_stats, step_offset=step_offset)
 
@@ -660,7 +663,7 @@ def _compute_probs_streaming_until_flip(*,document: str,query: str,ordered_offse
         ):
             save_stream_checkpoint("running")
 
-        if effective_steps < len(prompt_chunk):
+        if stop_on_flip and effective_steps < len(prompt_chunk):
             stopped_early = True
             save_stream_checkpoint("stopped_early")
             break
@@ -679,6 +682,8 @@ def dump_masked_prompts_json(out_path: str,*,query: str,baseline_prompt: str,
     masked_context_list: Optional[Sequence[str]] = None,
     order: Optional[Sequence[int]] = None,scores_at_pick: Optional[Sequence[float]] = None,
     policy: str = "flip",window: int = 1,
+    excluded_units: Optional[Sequence[Dict[str, Any]]] = None,
+    candidate_filter: Optional[Dict[str, Any]] = None,
                              ) -> str:
 
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
@@ -743,6 +748,10 @@ def dump_masked_prompts_json(out_path: str,*,query: str,baseline_prompt: str,
             "n_masked_total": int(n_steps),
         },
     }
+    if excluded_units is not None:
+        payload["excluded_units"] = list(excluded_units)
+    if candidate_filter is not None:
+        payload["candidate_filter"] = dict(candidate_filter)
 
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
@@ -761,6 +770,7 @@ def mask_by_order(full_context: str,query: str,model_con: model_config.ModelConf
     hf_model, hf_tok, hf_device = model_con.load()
     true_variants = model_con.get_true_variants()
     false_variants = model_con.get_false_variants()
+    mem = get_memory_config()
 
     full_prompt = model_con.format_prompt(question=query,context=full_context,context_cite_at2_formating=False,)
 
@@ -841,10 +851,29 @@ def mask_by_order(full_context: str,query: str,model_con: model_config.ModelConf
             rng=rng,
         )
 
+        excluded_units: List[Dict[str, Any]] = []
+        candidate_filter: Dict[str, Any] = {
+            "replacement_semex_filter_enabled": False,
+            "excluded_candidates": 0,
+        }
+
         if mode in {
             InterventionMode.REPLACEMENT_NEUTRAL_WORD,
             InterventionMode.REPLACEMENT_ANTONYM_WORD,
         }:
+            semex_filter_enabled = bool(getattr(replacement_resolver, "semex_filter_enabled", True))
+            candidate_filter["replacement_semex_filter_enabled"] = semex_filter_enabled
+            if semex_filter_enabled:
+                ordered_word_ids, pick_scores_all, semex_excluded, semex_meta = filter_replacement_order_semex(
+                    context=full_context,
+                    word_units=word_units,
+                    ordered_word_ids=ordered_word_ids,
+                    pick_scores=pick_scores_all,
+                    spacy_model=str(getattr(replacement_resolver, "semex_spacy_model", "en_core_web_sm")),
+                )
+                excluded_units.extend(semex_excluded)
+                candidate_filter.update(semex_meta)
+
             replacement_map = build_replacement_map_for_order(
                 context=full_context,
                 query=query,
@@ -859,13 +888,17 @@ def mask_by_order(full_context: str,query: str,model_con: model_config.ModelConf
                 model_id=model_con.model_id,
             )
 
-        ordered_word_ids, pick_scores_all = _filter_word_order_by_available_intervention(
+        ordered_word_ids, pick_scores_all, availability_excluded = _filter_word_order_by_available_intervention(
             word_units=word_units,
             order=ordered_word_ids,
             pick_scores=pick_scores_all,
             mode=mode,
             replacement_map=replacement_map,
+            return_exclusions=True,
         )
+        excluded_units.extend(availability_excluded)
+        candidate_filter["excluded_candidates"] = int(len(excluded_units))
+        candidate_filter["available_candidates"] = int(len(ordered_word_ids))
 
         order_list_all = [int(i) for i in ordered_word_ids]
 
@@ -881,6 +914,8 @@ def mask_by_order(full_context: str,query: str,model_con: model_config.ModelConf
                     "total_candidate_steps": int(len(order_list_all)),
                     "order": order_list_all,
                     "scores_at_pick": pick_scores_all,
+                    "excluded_units": excluded_units,
+                    "candidate_filter": candidate_filter,
                 },
             )
 
@@ -891,37 +926,23 @@ def mask_by_order(full_context: str,query: str,model_con: model_config.ModelConf
                 intervention_mode=mode,replacement_map=replacement_map,change_template_contextCite=change_template_contextCite,
                 hf_model=hf_model,hf_tok=hf_tok,hf_device=hf_device,true_variants=true_variants, false_variants=false_variants,
                 compute_probs_file_name=compute_probs_file_name,p_true_flipping=p_true_flipping,save_logs=save_logs,
+                stop_on_flip=True,chunk_size=mem.streaming_chunk_size,
                 checkpoint_path=checkpoint_path,checkpoint_every=checkpoint_every,
                 checkpoint_payload_base={"query": query,"p_true_flipping": bool(p_true_flipping),
-                    "intervention_mode": mode.name,"order": order_list_all,"scores_at_pick": pick_scores_all,},))
+                    "intervention_mode": mode.name,"order": order_list_all,"scores_at_pick": pick_scores_all,
+                    "excluded_units": excluded_units,"candidate_filter": candidate_filter,},))
         else:
-            masked_prompts, masked_context_list = create_word_intervention_prompts_iterative(
-                full_context,
-                query,
-                pieces=pieces,
-                word_units=word_units,
-                ordered_word_ids=ordered_word_ids,
-                intervention_mode=mode,
-                replacement_map=replacement_map,
-                change_template_contextCite=change_template_contextCite,
-            )
-
-            masked_stats, masked_logps = compute_probs(
-                hf_model,hf_tok,masked_prompts, hf_device,
-                None,
-                batch_size=2,
-                return_full_logp=True,
-                file_name=compute_probs_file_name,
-                detect_flip_to_true=p_true_flipping,
-                true_variants=true_variants,
-                false_variants=false_variants,
-                save_file=save_logs,stop_on_flip=False,
-            )
-
-            effective_steps = len(masked_stats)
-            if effective_steps < len(masked_prompts):
-                masked_prompts = masked_prompts[:effective_steps]
-                masked_context_list = masked_context_list[:effective_steps]
+            (masked_prompts,masked_context_list,masked_stats,masked_logps,_stopped_early,) = (
+                _compute_probs_streaming_until_flip_words(
+                document=full_context,query=query,pieces=pieces, word_units=word_units,ordered_word_ids=ordered_word_ids,
+                intervention_mode=mode,replacement_map=replacement_map,change_template_contextCite=change_template_contextCite,
+                hf_model=hf_model,hf_tok=hf_tok,hf_device=hf_device,true_variants=true_variants, false_variants=false_variants,
+                compute_probs_file_name=compute_probs_file_name,p_true_flipping=p_true_flipping,save_logs=save_logs,
+                stop_on_flip=False,chunk_size=mem.streaming_chunk_size,
+                checkpoint_path=checkpoint_path,checkpoint_every=checkpoint_every,
+                checkpoint_payload_base={"query": query,"p_true_flipping": bool(p_true_flipping),
+                    "intervention_mode": mode.name,"order": order_list_all,"scores_at_pick": pick_scores_all,
+                    "excluded_units": excluded_units,"candidate_filter": candidate_filter,},))
 
         effective_steps = len(masked_stats)
         order = order_list_all[:effective_steps]
@@ -960,6 +981,8 @@ def mask_by_order(full_context: str,query: str,model_con: model_config.ModelConf
                 scores_at_pick=pick_scores,
                 policy=dump_policy,
                 window=dump_window,
+                excluded_units=excluded_units,
+                candidate_filter=candidate_filter,
             )
 
         if checkpoint_path:
@@ -978,6 +1001,8 @@ def mask_by_order(full_context: str,query: str,model_con: model_config.ModelConf
                     "steps_scored": int(len(masked_stats)),
                     "order": [int(i) for i in order],
                     "scores_at_pick": final_pick_scores,
+                    "excluded_units": excluded_units,
+                    "candidate_filter": candidate_filter,
                     "masked_stats": masked_stats,
                     "masked_logps": masked_logps,
                 },
@@ -1014,6 +1039,7 @@ def mask_by_order(full_context: str,query: str,model_con: model_config.ModelConf
             true_variants=true_variants,false_variants=false_variants,
             compute_probs_file_name=compute_probs_file_name,
             p_true_flipping=p_true_flipping,save_logs=save_logs,
+            stop_on_flip=True,chunk_size=mem.streaming_chunk_size,
             checkpoint_path=checkpoint_path,
             checkpoint_every=checkpoint_every,
             checkpoint_payload_base={
@@ -1025,19 +1051,24 @@ def mask_by_order(full_context: str,query: str,model_con: model_config.ModelConf
         )
 
     else:
-        masked_prompts, masked_context_list = create_masked_prompts_iterative(
-            full_context,query,ordered_offsets,
-            change_template_contextCite=change_template_contextCite,)
-
-        masked_stats, masked_logps = compute_probs(hf_model,hf_tok,masked_prompts,hf_device,None,
-            batch_size=2,return_full_logp=True,file_name=compute_probs_file_name,detect_flip_to_true=p_true_flipping,
-            true_variants=true_variants,false_variants=false_variants,save_file=save_logs,stop_on_flip=False,)
-
-        # keep parallel arrays aligned if compute_probs stopped early on flip
-        effective_steps = len(masked_stats)
-        if effective_steps < len(masked_prompts):
-            masked_prompts = masked_prompts[:effective_steps]
-            masked_context_list = masked_context_list[:effective_steps]
+        masked_prompts, masked_context_list, masked_stats, masked_logps, _stopped_early = _compute_probs_streaming_until_flip(
+            document=full_context,query=query,
+            ordered_offsets=ordered_offsets,
+            change_template_contextCite=change_template_contextCite,
+            hf_model=hf_model,hf_tok=hf_tok,hf_device=hf_device,
+            true_variants=true_variants,false_variants=false_variants,
+            compute_probs_file_name=compute_probs_file_name,
+            p_true_flipping=p_true_flipping,save_logs=save_logs,
+            stop_on_flip=False,chunk_size=mem.streaming_chunk_size,
+            checkpoint_path=checkpoint_path,
+            checkpoint_every=checkpoint_every,
+            checkpoint_payload_base={
+                "query": query,
+                "p_true_flipping": bool(p_true_flipping),
+                "order": order_list_all,
+                "scores_at_pick": pick_scores_all,
+            },
+        )
 
     effective_steps = len(masked_stats)
     order = list(order)[:effective_steps]

@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from pathlib import Path
+from RagAdaptation.core.memory import MemoryConfig, cleanup_memory, get_memory_config
 from RagAdaptation.prompts_format import normalize_true_false
 
 import torch
@@ -57,9 +58,10 @@ def _variant_token_seqs(tok, variants: Sequence[str]) -> List[Tuple[str, List[in
     return out
 
 
-@torch.no_grad()
+@torch.inference_mode()
 def _score_variants_sequential(model,prompt_id_lists: List[List[int]],variant_token_seqs: List[Tuple[str, List[int]]],device,
-    *,row_batch_size: int,pad_token_id: int,) -> torch.Tensor:
+    *,row_batch_size: int,pad_token_id: int, cleanup_every_batches: int = 0,
+    aggressive_cleanup: bool = False,) -> torch.Tensor:
     """
     Score full variant sequences autoregressively.
 
@@ -77,22 +79,14 @@ def _score_variants_sequential(model,prompt_id_lists: List[List[int]],variant_to
     if num_prompts == 0 or num_variants == 0:
         return scores
 
-    flat_rows: List[List[int]] = []
-    mapping: List[Tuple[int, int, int, int]] = []
-    # mapping entry = (prompt_index, variant_index, prompt_len, variant_len)
+    rows: List[List[int]] = []
+    rows_map: List[Tuple[int, int, int, int]] = []
+    batches_seen = 0
 
-    for p_idx, prompt_ids in enumerate(prompt_id_lists):
-        if len(prompt_ids) == 0:
-            raise ValueError("Encountered an empty prompt tokenization; cannot score next tokens.")
-        for v_idx, (_, variant_ids) in enumerate(variant_token_seqs):
-            full_ids = prompt_ids + variant_ids # prompt's tokens id's + possible generated tokens id's
-            flat_rows.append(full_ids)
-            mapping.append((p_idx, v_idx, len(prompt_ids), len(variant_ids)))
-
-    for start in range(0, len(flat_rows), row_batch_size):
-        rows = flat_rows[start : start + row_batch_size]
-        rows_map = mapping[start : start + row_batch_size]
-
+    def flush_rows() -> None:
+        nonlocal rows, rows_map, batches_seen
+        if not rows:
+            return
         max_len = max(len(ids) for ids in rows)
 
         input_ids = torch.full(
@@ -113,22 +107,35 @@ def _score_variants_sequential(model,prompt_id_lists: List[List[int]],variant_to
             return_dict=True,output_attentions=False,
             output_hidden_states=False,use_cache=False,)
 
-        # logits[:, i, :] predicts token at position i+1
-        shift_logp = torch.log_softmax(out.logits[:, :-1, :], dim=-1)   # [R, L-1, V]
-        shift_labels = input_ids[:, 1:]                                  # [R, L-1]
-        token_logp = shift_logp.gather(2, shift_labels.unsqueeze(-1)).squeeze(-1)  # [R, L-1]
-
         for local_r, (p_idx, v_idx, prompt_len, variant_len) in enumerate(rows_map):
-            # Variant tokens occupy original positions [prompt_len, ..., prompt_len+variant_len-1]
-            # In shifted space these are indices [prompt_len-1, ..., prompt_len+variant_len-2]
+            # logits[:, i, :] predicts token at position i+1.
             start_pos = prompt_len - 1
             end_pos = start_pos + variant_len
-            seq_lp = token_logp[local_r, start_pos:end_pos].sum()
+            logits_slice = out.logits[local_r, start_pos:end_pos, :]
+            labels = input_ids[local_r, prompt_len : prompt_len + variant_len]
+            token_logp = torch.log_softmax(logits_slice, dim=-1).gather(
+                1, labels.unsqueeze(-1)
+            )
+            seq_lp = token_logp.sum()
             scores[p_idx, v_idx] = float(seq_lp.detach().cpu().item())
 
-        del input_ids, attention_mask, out, shift_logp, shift_labels, token_logp
-        # if torch.cuda.is_available():
-        #     torch.cuda.empty_cache()
+        del input_ids, attention_mask, out
+        rows = []
+        rows_map = []
+        batches_seen += 1
+        if cleanup_every_batches > 0 and batches_seen % cleanup_every_batches == 0:
+            cleanup_memory(aggressive=aggressive_cleanup)
+
+    for p_idx, prompt_ids in enumerate(prompt_id_lists):
+        if len(prompt_ids) == 0:
+            raise ValueError("Encountered an empty prompt tokenization; cannot score next tokens.")
+        for v_idx, (_, variant_ids) in enumerate(variant_token_seqs):
+            rows.append(prompt_ids + variant_ids)
+            rows_map.append((p_idx, v_idx, len(prompt_ids), len(variant_ids)))
+            if len(rows) >= row_batch_size:
+                flush_rows()
+
+    flush_rows()
 
     return scores
 
@@ -144,7 +151,8 @@ def compute_probs( model,tok,prompts: List[str],
     false_variants: Optional[List[str]] = None,
     reduction: str = "logsumexp",  # "logsumexp" or "max"
     save_file : bool = True, stop_on_flip  : bool = False,
-    intervention_mode:InterventionMode=1):
+    intervention_mode:InterventionMode=1,
+    memory_config: MemoryConfig | None = None):
 
     """
     General class scorer for binary true/false answers.
@@ -198,15 +206,15 @@ def compute_probs( model,tok,prompts: List[str],
         p.parent.mkdir(parents=True, exist_ok=True)
         log_f = p.open("w", encoding="utf-8")
 
-    # Keep row_batch_size conservative so memory stays close to the old code.
-    # Old code processed about `batch_size` full prompts at once; here each prompt
-    # expands into several variants, so we micro-batch the expanded rows.
-    row_batch_size = max(1, int(batch_size))
+    mem = get_memory_config(memory_config)
+    prompt_batch_size = mem.prompt_batch_size(batch_size)
+    # Each prompt expands into answer variants, so this is usually the limiter.
+    row_batch_size = mem.row_batch_size(prompt_batch_size)
     flag_flip_stop=False
     n=len(prompts)
 
-    for i in range(0, n , batch_size):
-            chunk = prompts[i : i + batch_size]
+    for i in range(0, n , prompt_batch_size):
+            chunk = prompts[i : i + prompt_batch_size]
 
             prompt_id_lists = [
                 [int(x) for x in tok(prompt, add_special_tokens=False).input_ids]
@@ -217,6 +225,8 @@ def compute_probs( model,tok,prompts: List[str],
                 model=model,prompt_id_lists=prompt_id_lists,
                 variant_token_seqs=all_cands,
                 device=device,row_batch_size=row_batch_size,pad_token_id=pad_token_id,
+                cleanup_every_batches=mem.cleanup_every_batches,
+                aggressive_cleanup=mem.aggressive_cleanup,
             )  # [B, K_true + K_false]
 
             true_logps = all_scores[:, :num_true]   # [B, Kt]
@@ -327,7 +337,7 @@ def compute_probs( model,tok,prompts: List[str],
                 #we already found a flip then stop the full iteration
                 if flag_flip_stop:
                     if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
+                        cleanup_memory(aggressive=mem.aggressive_cleanup)
                     if log_f is not None:
                         log_f.close()
                     return results, (p_true_values if return_full_logp else None)
@@ -336,7 +346,6 @@ def compute_probs( model,tok,prompts: List[str],
         log_f.close()
 
 
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    cleanup_memory(aggressive=mem.aggressive_cleanup)
 
     return results, (p_true_values if return_full_logp else None)

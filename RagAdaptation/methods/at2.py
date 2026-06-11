@@ -164,9 +164,7 @@ def get_at2_scores_for_intervention_mode(
 
 
 def run_at2_method(
-    *,
-    model_con: ModelConfig,
-    out_dir: str,
+    *,model_con: ModelConfig,out_dir: str,
     baseline_stats,
     model_id: str,
     full_context: str,

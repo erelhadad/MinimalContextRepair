@@ -1,37 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Union
 import torch as ch
+from RagAdaptation.core.memory import cleanup_memory, prepare_model_for_inference
 
 _HF_SCORER_CACHE: dict[str, tuple[Any, Any, Any]] = {}
 _HF_SINGLE_DEVICE_CACHE: dict[tuple[str, str], tuple[Any, Any, Any]] = {}
-
-
-
-import gc
-import torch
-
-def cleanup_memory() -> None:
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-
-def unload_hf_model(model_id: str, device: str | None = None):
-    global _HF_SCORER_CACHE, _HF_SINGLE_DEVICE_CACHE
-
-    cached = _HF_SCORER_CACHE.pop(model_id, None)
-    if cached is not None:
-        model, tok, dev = cached
-        del model, tok, dev
-
-    if device is not None:
-        cached2 = _HF_SINGLE_DEVICE_CACHE.pop((model_id, str(device)), None)
-        if cached2 is not None:
-            model, tok, dev = cached2
-            del model, tok, dev
-
-    cleanup_memory()
-
 def _require_transformers():
     try:
         from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -122,7 +96,8 @@ def get_hf_scorer(model_id: str = "mistralai/Mistral-7B-Instruct-v0.3"):
         device_map="auto",
         torch_dtype="auto",
         low_cpu_mem_usage=True,
-    ).eval()
+    )
+    prepare_model_for_inference(model)
 
     cached = (model, tok, model.device)
     _HF_SCORER_CACHE[model_id] = cached
@@ -162,7 +137,8 @@ def get_hf_scorer_single_device(
         trust_remote_code=False,
         #add that
         low_cpu_mem_usage=True,
-    ).to(device).eval()
+    ).to(device)
+    prepare_model_for_inference(model)
 
     cached = (model, tok, model.device)
     _HF_SINGLE_DEVICE_CACHE[cache_key] = cached

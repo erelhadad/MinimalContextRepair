@@ -30,10 +30,16 @@ def run_full_pipeline(*, model_id: str,query: str, full_context: str,
     tau: float = 0.01,epsilon: float = 0.6,k: int = 5,
     intervention_mode:InterventionMode=1, replacement_cache: str | None = None,
     neutral_model: str = "gpt-4o-mini", conceptnet_min_weight: float = 1.0,
+    replacement_semex_filter: bool = True,
+    replacement_semex_spacy_model: str = "en_core_web_sm",
     prefer_at2_word_scorer: bool = False,running_env:str="local",
+    use_yes_no_variants: bool = False,
 ):
 
-    model_config = Model_Config.ModelConfig(model_id)
+    model_config = Model_Config.ModelConfig(
+        model_id,
+        use_yes_no_variants=use_yes_no_variants,
+    )
     os.makedirs(out_dir, exist_ok=True)
 
     hf_model, hf_tok, hf_device = model_config.load()
@@ -65,12 +71,16 @@ def run_full_pipeline(*, model_id: str,query: str, full_context: str,
         cache_path=replacement_cache,
         neutral_model=neutral_model,
         conceptnet_min_weight=conceptnet_min_weight,
+        semex_filter_enabled=replacement_semex_filter,
+        semex_spacy_model=replacement_semex_spacy_model,
     )
 
     results = {
         "model_id": model_id,
         "query": query,
         "intervention_mode": mode.name,
+        "replacement_semex_filter": bool(replacement_semex_filter),
+        "replacement_semex_spacy_model": replacement_semex_spacy_model,
         "p_true_flipping": detect_flip_to_true,
         "baseline": {
             "prompt": baseline_prompt,

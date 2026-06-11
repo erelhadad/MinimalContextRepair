@@ -185,7 +185,7 @@ def run_attention_combined_method(
     method_name = "attention_combined"
     method_path = method_dir(out_dir, method_name)
     with timer.section("masking_search_compute_probs"):
-        masked_stats, masked_logps, order, scores_at_pick = mask_by_order_adaptive_combined(
+        masked_stats, masked_logps, order, scores_at_pick, excluded_units, candidate_filter = mask_by_order_adaptive_combined(
             full_context,
             query,
             model_con=model_con,
@@ -222,6 +222,8 @@ def run_attention_combined_method(
             "combined_k": k,
             "combined_epsilon": epsilon,
             "combined_tau": tau,
+            "excluded_units": excluded_units,
+            "candidate_filter": candidate_filter,
             "timing": timer.to_dict(),
         },
         save_logs=save_logs,
@@ -305,7 +307,7 @@ def run_context_cite_combined_method(
     method_name = "context_cite_combined"
     method_path = method_dir(out_dir, method_name)
     with timer.section("masking_search_compute_probs"):
-        masked_stats, masked_logps, order, scores_at_pick = mask_by_order_adaptive_combined(
+        masked_stats, masked_logps, order, scores_at_pick, excluded_units, candidate_filter = mask_by_order_adaptive_combined(
             full_context,
             query,
             model_con=model_con,
@@ -342,6 +344,8 @@ def run_context_cite_combined_method(
             "combined_k": k,
             "combined_epsilon": epsilon,
             "combined_tau": tau,
+            "excluded_units": excluded_units,
+            "candidate_filter": candidate_filter,
             "timing": timer.to_dict(),
         },
         save_logs=save_logs,
@@ -498,7 +502,7 @@ def run_at2_combined_method(
         return np.asarray(cur_scores, dtype=np.float32)
 
     with timer.section("masking_search_compute_probs"):
-        masked_stats, masked_logps, order, scores_at_pick = mask_by_order_adaptive_combined(
+        masked_stats, masked_logps, order, scores_at_pick, excluded_units, candidate_filter = mask_by_order_adaptive_combined(
             full_context,
             query,
             model_con=model_con,
@@ -538,6 +542,8 @@ def run_at2_combined_method(
             "combined_k": k,
             "combined_epsilon": epsilon,
             "combined_tau": tau,
+            "excluded_units": excluded_units,
+            "candidate_filter": candidate_filter,
             "timing": timer.to_dict(),
         },
         save_logs=save_logs,

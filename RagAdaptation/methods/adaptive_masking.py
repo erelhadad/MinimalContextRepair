@@ -21,6 +21,7 @@ from RagAdaptation.core.prompting import (
 from RagAdaptation.core.replacements import (
     ReplacementResolver,
     build_replacement_map_for_order,
+    filter_replacement_order_semex,
 )
 from RagAdaptation.methods.common import (
     _get_mask_prompt_template,
@@ -97,6 +98,14 @@ def _write_adaptive_trace(path: Optional[str], trace: List[Dict[str, Any]]) -> N
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(trace, f, ensure_ascii=False, indent=2)
+
+
+def _write_adaptive_filter_metadata(path: Optional[str], payload: Dict[str, Any]) -> None:
+    if not path:
+        return
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
 
 def _lookup_replacement_for_trace(
     replacement_map: Optional[Dict[Any, str]],
@@ -415,10 +424,30 @@ def mask_by_order_adaptive_combined(full_context: str,query: str,
     order = np.argsort(scores_vec)[::-1]
 
     if mode != InterventionMode.MASK_TOKEN and word_units is not None:
+        excluded_units: List[Dict[str, Any]] = []
+        candidate_filter: Dict[str, Any] = {
+            "replacement_semex_filter_enabled": False,
+            "excluded_candidates": 0,
+        }
+
         if mode in {
             InterventionMode.REPLACEMENT_NEUTRAL_WORD,
             InterventionMode.REPLACEMENT_ANTONYM_WORD,
         }:
+            semex_filter_enabled = bool(getattr(replacement_resolver, "semex_filter_enabled", True))
+            candidate_filter["replacement_semex_filter_enabled"] = semex_filter_enabled
+            if semex_filter_enabled:
+                filtered_order, _filtered_scores, semex_excluded, semex_meta = filter_replacement_order_semex(
+                    context=full_context,
+                    word_units=word_units,
+                    ordered_word_ids=[int(i) for i in order],
+                    pick_scores=[float(scores_vec[int(i)]) for i in order],
+                    spacy_model=str(getattr(replacement_resolver, "semex_spacy_model", "en_core_web_sm")),
+                )
+                order = np.asarray(filtered_order, dtype=np.int64)
+                excluded_units.extend(semex_excluded)
+                candidate_filter.update(semex_meta)
+
             replacement_map = build_replacement_map_for_order(
                 context=full_context,
                 query=query,
@@ -433,14 +462,25 @@ def mask_by_order_adaptive_combined(full_context: str,query: str,
                 model_id=model_con.model_id,
             )
 
-        filtered_order, _filtered_scores = _filter_word_order_by_available_intervention(
+        filtered_order, _filtered_scores, availability_excluded = _filter_word_order_by_available_intervention(
             word_units=word_units,
             order=[int(i) for i in order],
             pick_scores=[float(scores_vec[int(i)]) for i in order],
             mode=mode,
             replacement_map=replacement_map,
+            return_exclusions=True,
         )
+        excluded_units.extend(availability_excluded)
+        candidate_filter["excluded_candidates"] = int(len(excluded_units))
+        candidate_filter["available_candidates"] = int(len(filtered_order))
         order = np.asarray(filtered_order, dtype=np.int64)
+    else:
+        excluded_units = []
+        candidate_filter = {
+            "replacement_semex_filter_enabled": False,
+            "excluded_candidates": 0,
+            "available_candidates": int(len(order)),
+        }
 
     selected: set[int] = set()
     current_order: List[int] = [int(i) for i in order]
@@ -641,6 +681,7 @@ def mask_by_order_adaptive_combined(full_context: str,query: str,
 
                 # Full intervention metadata for the whole selected set at this step.
                 "interventions": step_intervention_metadata,
+                "excluded_candidate_count": int(len(excluded_units)),
             }
         )
 
@@ -672,9 +713,19 @@ def mask_by_order_adaptive_combined(full_context: str,query: str,
             masked_context_list=masked_contexts,
             order=selected_order,scores_at_pick=scores_at_pick,
             policy=dump_policy,window=dump_window,
+            excluded_units=excluded_units,
+            candidate_filter=candidate_filter,
         )
 
     if adaptive_trace_path and save_logs:
         _write_adaptive_trace(adaptive_trace_path, trace)
+        _write_adaptive_filter_metadata(
+            str(Path(adaptive_trace_path).with_name("replacement_filter.json")),
+            {
+                "intervention_mode": mode.name,
+                "candidate_filter": candidate_filter,
+                "excluded_units": excluded_units,
+            },
+        )
 
-    return masked_stats, masked_logps, selected_order, scores_at_pick
+    return masked_stats, masked_logps, selected_order, scores_at_pick, excluded_units, candidate_filter

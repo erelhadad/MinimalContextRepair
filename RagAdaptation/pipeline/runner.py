@@ -11,6 +11,7 @@ from RagAdaptation.core.artifacts import create_run_root, example_dir, model_dir
 from RagAdaptation.core.documents import combine_document_text, load_documents_any
 from RagAdaptation.pipeline.config import PipelineConfig
 from RagAdaptation.prompts_format import normalize_true_false
+from RagAdaptation.core.memory import set_global_memory_config
 from RagAdaptation.core.models import cleanup_memory, unload_all_hf_models
 from RagAdaptation.core.prompting import coerce_intervention_mode
 
@@ -59,11 +60,23 @@ def build_manifest(config: PipelineConfig, items_count: int) -> dict[str, Any]:
         "tau":config.tau,
         "epsilon":config.epsilon,
         "k":config.k,"intervention_mode":config.intervention_mode,
+        "use_yes_no_variants": config.use_yes_no_variants,
         "replacement_cache": str(config.replacement_cache),
         "neutral_model": config.neutral_model,
         "conceptnet_min_weight": config.conceptnet_min_weight,
+        "replacement_semex_filter": config.replacement_semex_filter,
+        "replacement_semex_spacy_model": config.replacement_semex_spacy_model,
         "prefer_at2_word_scorer": config.prefer_at2_word_scorer,
         "running_env":config.running_env,
+        "memory": {
+            "max_scoring_prompt_batch_size": config.max_scoring_prompt_batch_size,
+            "scoring_row_batch_size": config.scoring_row_batch_size,
+            "streaming_chunk_size": config.streaming_chunk_size,
+            "cleanup_every_batches": config.cleanup_every_batches,
+            "aggressive_cleanup": config.aggressive_cleanup,
+            "unload_models_between_runs": config.unload_models_between_runs,
+            "attention_native_seq_len_limit": config.attention_native_seq_len_limit,
+        },
     }
 
 
@@ -71,6 +84,8 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
 
     # Intervention mode coercing
     intervention_mode = coerce_intervention_mode(config.intervention_mode)
+    memory_config = config.memory_config()
+    set_global_memory_config(memory_config)
 
     items = load_items(config.input_path)
     run_root = create_run_root(config.output_root)
@@ -137,8 +152,11 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
                     replacement_cache=str(config.replacement_cache),
                     neutral_model=config.neutral_model,
                     conceptnet_min_weight=config.conceptnet_min_weight,
+                    replacement_semex_filter=config.replacement_semex_filter,
+                    replacement_semex_spacy_model=config.replacement_semex_spacy_model,
                     prefer_at2_word_scorer=config.prefer_at2_word_scorer,
-                    running_env=config.running_env
+                    running_env=config.running_env,
+                    use_yes_no_variants=config.use_yes_no_variants,
                 )
                 print(f"[run] ex={ex_i} model={model_id} flip_to_true={detect_flip_to_true}")
             except Exception as e:
@@ -159,6 +177,11 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
                     print(f"[oom-skip] ex={ex_i} model={model_id}: {e}")
                     continue
                 raise
+            finally:
+                if memory_config.unload_models_between_runs:
+                    unload_all_hf_models(model_id)
+                else:
+                    cleanup_memory(aggressive=memory_config.aggressive_cleanup)
 
 
     return run_root

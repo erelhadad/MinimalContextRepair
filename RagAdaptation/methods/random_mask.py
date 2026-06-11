@@ -30,7 +30,7 @@ def run_random_method(*,model_con:ModelConfig, out_dir: str, baseline_stats, ful
                 dump_policy=dump_policy,
                 dump_window=dump_window,
                 baseline_stats=baseline_stats,
-                save_logs=False,
+                save_logs=save_logs,
                 stop_on_flip=True,
                 intervention_mode=intervention_mode,
                 replacement_resolver=replacement_resolver,

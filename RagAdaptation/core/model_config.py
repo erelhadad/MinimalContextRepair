@@ -14,6 +14,7 @@ class ModelConfig:
 
     # prompt / scoring behavior
     prompt_style: str = "rag"          # "rag" or "a2t"
+    use_yes_no_variants: bool = False
     true_variants: List[str] = field(default_factory=lambda: ["true", "True", "TRUE"])
     false_variants: List[str] = field(default_factory=lambda: ["false", "False", "FALSE"])
 
@@ -86,6 +87,18 @@ class ModelConfig:
         for key, value in spec.items():
             setattr(self, key, value)
 
+        if self.use_yes_no_variants:
+            self.true_variants = self._extend_variants(self.true_variants, ["yes", "Yes", "YES", " yes"])
+            self.false_variants = self._extend_variants(self.false_variants, ["no", "No", "NO", " no"])
+
+    @staticmethod
+    def _extend_variants(base: List[str], extra: List[str]) -> List[str]:
+        merged = list(base)
+        for variant in extra:
+            if variant not in merged:
+                merged.append(variant)
+        return merged
+
     # -------- loading --------
     def load(self):
         """
@@ -151,6 +164,7 @@ class ModelConfig:
         return {
             "model_id": self.model_id,
             "prompt_style": self.prompt_style,
+            "use_yes_no_variants": self.use_yes_no_variants,
             "supports_reasoning_toggle": self.supports_reasoning_toggle,
             "default_reasoning": self.default_reasoning,
             "true_variants": self.true_variants,
