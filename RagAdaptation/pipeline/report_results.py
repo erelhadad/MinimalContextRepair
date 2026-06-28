@@ -9,6 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
+from RagAdaptation.core.artifacts import sanitize_name
+
 
 # ---------------- helpers ----------------
 
@@ -68,9 +70,16 @@ def extract_ts(path: Path) -> datetime:
 
 def find_model_dir(example_dir: Path, model_id: str) -> Optional[Path]:
     model_short = short_model_name(model_id)
-    model_dir = example_dir / "models" / model_short
-    if model_dir.exists():
-        return model_dir
+    candidates = [
+        example_dir,
+        example_dir / sanitize_name(model_id),
+        example_dir / model_short,
+        example_dir / "models" / sanitize_name(model_id),
+        example_dir / "models" / model_short,
+    ]
+    for model_dir in candidates:
+        if model_dir.exists() and get_latest_pipeline_result(model_dir) is not None:
+            return model_dir
     return None
 
 

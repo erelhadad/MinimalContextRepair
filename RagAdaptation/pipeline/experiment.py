@@ -5,7 +5,7 @@ import os
 from typing import List, Optional
 
 from RagAdaptation.compute_probs_updated import compute_probs
-from RagAdaptation.core.artifacts import method_dir, write_json
+from RagAdaptation.core.artifacts import write_json
 from RagAdaptation.methods import (
     run_attention_method,
     run_at2_method,
@@ -25,15 +25,18 @@ from RagAdaptation.core.replacements import ReplacementResolver
 def run_full_pipeline(*, model_id: str,query: str, full_context: str,
     methods: List[str],seeds: Optional[List[int]] = None, out_dir: str = "runs",
     detect_flip_to_true: bool = False, dump_policy: str = "flip", dump_window: int = 1,
-    recompute: Optional[List[str]] = None, skip_recompute: List[int] = None, save_logs: bool = True,
+    recompute: Optional[List[str]] = None, skip_recompute: List[int] = None, save_logs: bool = False,
+    save_plots: bool = False,
     stop_on_flip: bool = False,
     tau: float = 0.01,epsilon: float = 0.6,k: int = 5,
     intervention_mode:InterventionMode=1, replacement_cache: str | None = None,
-    neutral_model: str = "gpt-4o-mini", conceptnet_min_weight: float = 1.0,
+    neutral_model: str | None = None,  # Deprecated no-op; retained for older callers.
+    conceptnet_min_weight: float = 1.0,
     replacement_semex_filter: bool = True,
     replacement_semex_spacy_model: str = "en_core_web_sm",
     prefer_at2_word_scorer: bool = False,running_env:str="local",
     use_yes_no_variants: bool = False,
+    use_model_default_tuning: bool = False,
 ):
 
     model_config = Model_Config.ModelConfig(
@@ -47,7 +50,6 @@ def run_full_pipeline(*, model_id: str,query: str, full_context: str,
     baseline_prompt = model_config.format_prompt(question=query,context=full_context,context_cite_at2_formating=False,
     )
 
-    baseline_dir = method_dir(out_dir, "baseline")
     timing = TimingRecorder()
 
     with timing.section("baseline_compute_probs"):
@@ -57,11 +59,11 @@ def run_full_pipeline(*, model_id: str,query: str, full_context: str,
             hf_device, None,
             batch_size=1,
             return_full_logp=True,
-            file_name=str(baseline_dir / f"compute_probs_{model_id}.txt"),
+            file_name="baseline_flip_log.txt",
             detect_flip_to_true=detect_flip_to_true,
             true_variants=true_variants,
             false_variants=false_variants,
-            save_file=save_logs,
+            save_file=False,
             stop_on_flip=stop_on_flip,
         )
 
@@ -69,7 +71,6 @@ def run_full_pipeline(*, model_id: str,query: str, full_context: str,
     mode = coerce_intervention_mode(intervention_mode)
     replacement_resolver = ReplacementResolver(
         cache_path=replacement_cache,
-        neutral_model=neutral_model,
         conceptnet_min_weight=conceptnet_min_weight,
         semex_filter_enabled=replacement_semex_filter,
         semex_spacy_model=replacement_semex_spacy_model,
@@ -79,6 +80,7 @@ def run_full_pipeline(*, model_id: str,query: str, full_context: str,
         "model_id": model_id,
         "query": query,
         "intervention_mode": mode.name,
+        "replacement_model_id": model_id,
         "replacement_semex_filter": bool(replacement_semex_filter),
         "replacement_semex_spacy_model": replacement_semex_spacy_model,
         "p_true_flipping": detect_flip_to_true,
@@ -105,6 +107,92 @@ def run_full_pipeline(*, model_id: str,query: str, full_context: str,
     import time
 
     for method_name in methods:
+        if running_env=="local" and use_model_default_tuning:
+            if model_id == "Qwen/Qwen3-4B-Instruct-2507":
+                if method_name == "at2_combined":
+                    k = 3
+                    epsilon =0.6
+                    tau = 0.05
+                if method_name == "attention_combined":
+                    k= 5
+                    epsilon= 0.6
+                    tau = 0.05
+                if method_name == "context_cite_combined":
+                    k = 5
+                    epsilon = 0.7
+                    tau = 0.05
+
+            if model_id == "microsoft/Phi-3-mini-4k-instruct":
+                if method_name == "at2_combined":
+                    k = 5
+                    epsilon = 0.5
+                    tau = 0.2
+                if method_name == "attention_combined":
+                    k= 5
+                    epsilon = 0.6
+                    tau = 0.2
+                if method_name == "context_cite_combined":
+                    k = 5
+                    epsilon = 0.5
+                    tau = 0.2
+            if model_id == "mistralai/Mistral-7B-Instruct-v0.3":
+                if method_name == "at2_combined":
+                    k = 5
+                    epsilon =0.5
+                    tau = 0.2
+                if method_name == "attention_combined":
+                    k= 3
+                    epsilon= 0.5
+                    tau = 0.2
+                if method_name == "context_cite_combined": #approximation
+                    k = 5
+                    epsilon = 0.6
+                    tau = 0.2
+        elif running_env=="newton" and use_model_default_tuning:
+                if model_id == "Qwen/Qwen3-4B-Instruct-2507":
+                    if method_name == "at2_combined":
+                        k = 5
+                        epsilon = 0.5
+                        tau = 0.2
+                    if method_name == "attention_combined":
+                        k = 5
+                        epsilon = 0.6
+                        tau = 0.2
+                    if method_name == "context_cite_combined":
+                        k = 5
+                        epsilon = 0.6
+                        tau = 0.2
+
+                if model_id == "microsoft/Phi-3-mini-4k-instruct":
+                    if method_name == "at2_combined":
+                        k = 5
+                        epsilon = 0.5
+                        tau = 0.2
+                    if method_name == "attention_combined":
+                        k = 3
+                        epsilon = 0.5
+                        tau = 0.1
+                    if method_name == "context_cite_combined":
+                        k = 5
+                        epsilon = 0.6
+                        tau = 0.2
+                if model_id == "mistralai/Mistral-7B-Instruct-v0.3":
+                    if method_name == "at2_combined":
+                        k = 4
+                        epsilon = 0.6
+                        tau = 0.2
+                    if method_name == "attention_combined":
+                        k = 4
+                        epsilon = 0.5
+                        tau = 0.1
+                    if method_name == "context_cite_combined":  # approximation
+                        k = 3
+                        epsilon = 0.5
+                        tau = 0.1
+        elif use_model_default_tuning:
+            print("there isn't any env mentioned therefore I couldn't match finetune parameter.")
+
+
         if method_name == "baseline":
             continue
         try:
@@ -123,6 +211,7 @@ def run_full_pipeline(*, model_id: str,query: str, full_context: str,
                         dump_policy=dump_policy,
                         dump_window=dump_window,
                         save_logs=save_logs,
+                        save_plots=save_plots,
                         stop_on_flip=stop_on_flip,
                         intervention_mode=mode,
                         replacement_resolver=replacement_resolver,
@@ -144,8 +233,9 @@ def run_full_pipeline(*, model_id: str,query: str, full_context: str,
                     dump_policy=dump_policy,
                     dump_window=dump_window,
                     save_logs=save_logs,
+                    save_plots=save_plots,
                     stop_on_flip=stop_on_flip,
-                    intervention_mode=mode
+                    intervention_mode=mode,
                 )
                 results["methods"]["attention_flow"]["time"] = time.perf_counter() - method_time
                 save_partial()
@@ -162,6 +252,7 @@ def run_full_pipeline(*, model_id: str,query: str, full_context: str,
                     dump_policy=dump_policy,
                     dump_window=dump_window,
                     save_logs=save_logs,
+                    save_plots=save_plots,
                     stop_on_flip=stop_on_flip,
                     intervention_mode=mode,
                     replacement_resolver=replacement_resolver,
@@ -178,7 +269,7 @@ def run_full_pipeline(*, model_id: str,query: str, full_context: str,
                         full_context=full_context,
                         query=query,p_true_flipping=detect_flip_to_true,
                         dump_policy=dump_policy,dump_window=dump_window,
-                        save_logs=save_logs,stop_on_flip=stop_on_flip,
+                        save_logs=save_logs,save_plots=save_plots,stop_on_flip=stop_on_flip,
                         intervention_mode=mode,
                         replacement_resolver=replacement_resolver)
 
@@ -201,6 +292,7 @@ def run_full_pipeline(*, model_id: str,query: str, full_context: str,
                         dump_policy=dump_policy,
                         dump_window=dump_window,
                         save_logs=save_logs,
+                        save_plots=save_plots,
                         stop_on_flip=stop_on_flip,
                         intervention_mode=mode,
                         replacement_resolver=replacement_resolver,
@@ -226,6 +318,7 @@ def run_full_pipeline(*, model_id: str,query: str, full_context: str,
                     dump_policy=dump_policy,
                     dump_window=dump_window,
                     save_logs=save_logs,
+                    save_plots=save_plots,
                     stop_on_flip=stop_on_flip,
                     tau=tau,
                     epsilon=epsilon,
@@ -251,6 +344,7 @@ def run_full_pipeline(*, model_id: str,query: str, full_context: str,
                     dump_policy=dump_policy,
                     dump_window=dump_window,
                     save_logs=save_logs,
+                    save_plots=save_plots,
                     stop_on_flip=stop_on_flip,
                     tau=tau,
                     epsilon=epsilon,
@@ -277,6 +371,7 @@ def run_full_pipeline(*, model_id: str,query: str, full_context: str,
                     dump_policy=dump_policy,
                     dump_window=dump_window,
                     save_logs=save_logs,
+                    save_plots=save_plots,
                     stop_on_flip=stop_on_flip,
                     tau=tau,
                     epsilon=epsilon,
@@ -316,12 +411,14 @@ def run_full_pipeline(*, model_id: str,query: str, full_context: str,
                     query=query,
                     p_true_flipping=detect_flip_to_true,
                     save_logs=save_logs,
+                    save_plots=save_plots,
                     stop_on_flip=stop_on_flip,
-                    intervention_mode=mode
+                    intervention_mode=mode,
+                    replacement_resolver=replacement_resolver,
                 )
                 results["methods"][result_name] = payload
-                results["methods"][result_name]["time"].setdefault("timing", {})
-                results["methods"][result_name]["time"]["outer"] = method_timer.to_dict()["total_sec"]
+                results["methods"][result_name].setdefault("timing", {})
+                results["methods"][result_name]["timing"]["outer"] = method_timer.to_dict()
                 save_partial()
             except Exception as e:
                 if rec_method == "at2":
@@ -346,13 +443,15 @@ def run_full_pipeline(*, model_id: str,query: str, full_context: str,
                         p_true_flipping=detect_flip_to_true,
                         skip_recompute=val,
                         save_logs=save_logs,
+                        save_plots=save_plots,
                         stop_on_flip=stop_on_flip,
-                        intervention_mode=mode
+                        intervention_mode=mode,
+                        replacement_resolver=replacement_resolver,
                     )
                     key = f"{result_name}_SR{val}"
                     results["methods"][key] = payload
-                    results["methods"][key]["time"].setdefault("timing", {})
-                    results["methods"][key]["time"]["inner"] = method_timer.to_dict()["total_sec"]
+                    results["methods"][key].setdefault("timing", {})
+                    results["methods"][key]["timing"]["inner"] = method_timer.to_dict()
                     save_partial()
                 except Exception as e:
                     if rec_method == "at2":

@@ -22,8 +22,10 @@ class PipelineConfig:
     context_field: str = "context"
     skip_example_indices:  List[int] = field(default_factory=list)
     skip_recompute: List[int] = None
-    save_logs :bool = True
+    save_logs :bool = False
+    save_plots: bool = False
     stop_at_flip :bool = True
+    output_layout: str = "simple"
     examples_range: Tuple[int,Optional[int]] = None
     tau:float = 0.5
     epsilon:float = 1e-2
@@ -31,7 +33,6 @@ class PipelineConfig:
     intervention_mode:str="mask_token"
     use_yes_no_variants: bool = False
     replacement_cache: Path = CACHE_DIR / "replacement_cache.json"
-    neutral_model: str = "gpt-4o-mini"
     conceptnet_min_weight: float = 1.0
     replacement_semex_filter: bool = True
     replacement_semex_spacy_model: str = "en_core_web_sm"

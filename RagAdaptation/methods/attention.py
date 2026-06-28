@@ -9,7 +9,7 @@ from RagAdaptation.methods.common import attention_token_scores_to_word_scores, 
 from RagAdaptation.core.model_config import ModelConfig
 from RagAdaptation.core.prompting import InterventionMode, coerce_intervention_mode, split_context_to_word_units
 
-def run_attention_method(*,model_con:ModelConfig, out_dir: str, baseline_prompt: str, baseline_stats: Dict[str, Any], full_context: str, query: str, p_true_flipping: bool, dump_policy: str, dump_window: int,save_logs:bool=True, stop_on_flip: bool=False,
+def run_attention_method(*,model_con:ModelConfig, out_dir: str, baseline_prompt: str, baseline_stats: Dict[str, Any], full_context: str, query: str, p_true_flipping: bool, dump_policy: str, dump_window: int,save_logs:bool=True, save_plots: bool=False, stop_on_flip: bool=False,
                          intervention_mode=None,replacement_resolver=None):
     hf_model, hf_tok, hf_device= model_con.load()
     mode = coerce_intervention_mode(intervention_mode or InterventionMode.MASK_TOKEN)
@@ -42,9 +42,9 @@ def run_attention_method(*,model_con:ModelConfig, out_dir: str, baseline_prompt:
             query,
             model_con=model_con,
             scores=attn,
-            compute_probs_file_name=str(method_path / "compute_probs.txt"),
+            compute_probs_file_name=str(method_path / "flip_log.txt"),
             p_true_flipping=p_true_flipping,
-            dump_json_path=str(method_path / "dump.json"),
+            dump_json_path=str(method_path / "mask_trace.json"),
             dump_policy=dump_policy,
             dump_window=dump_window,
             source_offsets=source_offsets,
@@ -54,7 +54,7 @@ def run_attention_method(*,model_con:ModelConfig, out_dir: str, baseline_prompt:
             replacement_resolver=replacement_resolver,
         )
 
-    if save_logs:
+    if save_plots:
         with timer.section("plot"):
             create_p_true_function(masked_logps, out_dir=str(plots_dir(out_dir)), filename="attention_p_true.png")
     return {"masked_stats": masked_stats, "masked_logps": masked_logps, "timing": timer.to_dict()}

@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 from RagAdaptation.methods.attention_flow import _get_augmented_attention_mats_auto, _build_sparse_flow_graph
 import networkx as nx
 import matplotlib
@@ -27,6 +27,18 @@ from RagAdaptation.compute_probs_updated import compute_probs
 from RagAdaptation.prompts_format import TF_RAG_TEMPLATE, TF_RAG_TEMPLATE_A2T
 from RagAdaptation.baseline.bruteforce_common import tokenize_context_with_offsets
 from RagAdaptation.core.prompting import ChatPromptTemplate
+from RagAdaptation.core.prompting import (
+    InterventionMode,
+    build_context_with_word_interventions_metadata,
+    coerce_intervention_mode,
+    split_context_to_word_units,
+    _filter_word_order_by_available_intervention,
+)
+from RagAdaptation.core.replacements import (
+    ReplacementResolver,
+    build_replacement_map_for_order,
+    filter_replacement_order_semex,
+)
 from RagAdaptation.baseline.partitioner import TokenContextPartitioner
 
 from RagAdaptation.methods.common import (
@@ -110,6 +122,84 @@ def _map_scores_by_char_overlap(
 
     lengths = np.array([max(1, e - s) for (s, e) in base_offsets], dtype=np.float32)
     return base_scores / lengths
+
+
+def _aggregate_token_scores_to_spans(
+    *,
+    target_offsets: Sequence[Tuple[int, int]],
+    token_offsets: Sequence[Tuple[int, int]],
+    token_scores: np.ndarray,
+    reduction: str = "sum",
+) -> np.ndarray:
+    token_scores = np.asarray(token_scores, dtype=np.float32)
+    out = np.zeros(len(target_offsets), dtype=np.float32)
+
+    for out_i, (s, e) in enumerate(target_offsets):
+        vals = []
+        s, e = int(s), int(e)
+        for tok_i, (ts, te) in enumerate(token_offsets):
+            if tok_i >= len(token_scores):
+                break
+            ts, te = int(ts), int(te)
+            if te <= ts:
+                continue
+            if min(e, te) > max(s, ts):
+                vals.append(float(token_scores[tok_i]))
+
+        if not vals:
+            out[out_i] = 0.0
+        elif reduction == "sum":
+            out[out_i] = float(np.sum(vals))
+        elif reduction == "mean":
+            out[out_i] = float(np.mean(vals))
+        elif reduction == "max":
+            out[out_i] = float(np.max(vals))
+        else:
+            raise ValueError(f"Unsupported reduction={reduction!r}")
+
+    return out
+
+
+def _build_word_intervention_context_and_offsets(
+    *,
+    pieces: Sequence[str],
+    word_units,
+    selected_word_ids: Sequence[int],
+    mode: InterventionMode,
+    replacement_map: Optional[Mapping[Any, str]],
+) -> Tuple[str, List[Tuple[int, int]]]:
+    selected = {int(i) for i in selected_word_ids}
+    context, metadata = build_context_with_word_interventions_metadata(
+        pieces=pieces,
+        word_units=word_units,
+        selected_word_ids=selected,
+        mode=mode,
+        replacement_map=replacement_map,
+    )
+
+    current_pieces = list(pieces)
+    unit_by_piece = {int(unit.piece_index): unit for unit in word_units}
+    for wid, meta in metadata.items():
+        unit = word_units[int(wid)]
+        replacement = meta.get("replacement")
+        if replacement is not None:
+            current_pieces[int(unit.piece_index)] = str(replacement)
+
+    word_offsets: List[Tuple[int, int]] = [(0, 0)] * len(word_units)
+    pos = 0
+    for piece_i, piece in enumerate(current_pieces):
+        piece_text = str(piece)
+        start = pos
+        end = start + len(piece_text)
+        unit = unit_by_piece.get(int(piece_i))
+        if unit is not None:
+            word_offsets[int(unit.word)] = (start, end)
+        pos = end
+
+    if pos != len(context):
+        raise RuntimeError("Internal error: rebuilt word context length mismatch.")
+
+    return context, word_offsets
 
 
 def _attention_scores_mapped_to_base(
@@ -227,6 +317,176 @@ def _attention_scores_mapped_to_base(
         torch.cuda.empty_cache()
 
     return scores_base
+
+
+def _attention_token_scores_for_context(
+    *,
+    hf_model,
+    hf_tok,
+    hf_device,
+    prompt_template: ChatPromptTemplate,
+    masked_context: str,
+    query: str,
+) -> Tuple[np.ndarray, List[Tuple[int, int]]]:
+    full_prompt = prompt_template.format(context=masked_context, question=query)
+
+    enc_full = hf_tok(
+        full_prompt,
+        add_special_tokens=False,
+        return_offsets_mapping=True,
+        truncation=False,
+        padding=False,
+    )
+
+    offsets_full = enc_full["offset_mapping"]
+    if hasattr(offsets_full, "tolist"):
+        offsets_full = offsets_full.tolist()
+
+    ctx_token_indices, ctx_rel_offsets, after_ctx = _find_token_indices_by_substring(
+        full_prompt, masked_context, offsets_full, start_search_at=0
+    )
+    q_token_indices, _, _ = _find_token_indices_by_substring(
+        full_prompt, query, offsets_full, start_search_at=after_ctx
+    )
+
+    enc = hf_tok(
+        full_prompt,
+        add_special_tokens=False,
+        return_tensors="pt",
+        truncation=False,
+        padding=False,
+    )
+    enc = {k: v.to(hf_device) for k, v in enc.items()}
+
+    with torch.no_grad():
+        out = hf_model(
+            **enc,
+            return_dict=True,
+            output_hidden_states=True,
+            output_attentions=False,
+            use_cache=False,
+        )
+
+    hidden_states = out.hidden_states
+    if hidden_states is None:
+        raise ValueError("Model did not return hidden states.")
+
+    model_type = _infer_attention_model_type(hf_model)
+    query_states, key_states, causal_mask, head_dim = _project_qk_last_layer(
+        hf_model,
+        hidden_states,
+        model_type=model_type,
+    )
+
+    q_start = q_token_indices[0]
+    q_end = q_token_indices[-1] + 1
+
+    query_states = query_states[:, :, q_start:q_end, :]
+    causal_mask = causal_mask[:, :, q_start:q_end, :]
+
+    attn_scores = torch.matmul(
+        query_states, key_states.transpose(2, 3)
+    ) / np.sqrt(float(head_dim))
+    attn_scores = attn_scores + causal_mask
+    attn_weights = torch.softmax(attn_scores, dim=-1, dtype=torch.float32)
+
+    last_layer_q_to_all = attn_weights[0].mean(dim=0)
+    c_idx = torch.tensor(
+        ctx_token_indices,
+        device=last_layer_q_to_all.device,
+        dtype=torch.long,
+    )
+    q_to_c = last_layer_q_to_all.index_select(1, c_idx)
+    scores_ctx = q_to_c.sum(dim=0).detach().float().cpu().numpy().astype(
+        np.float32, copy=False
+    )
+
+    del (
+        out,
+        hidden_states,
+        query_states,
+        key_states,
+        causal_mask,
+        attn_scores,
+        attn_weights,
+        last_layer_q_to_all,
+        q_to_c,
+        c_idx,
+        enc,
+    )
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    return scores_ctx, [(int(s), int(e)) for s, e in ctx_rel_offsets]
+
+
+def _contextcite_token_scores_for_context(
+    *,
+    hf_model,
+    hf_tok,
+    masked_context: str,
+    query: str,
+) -> Tuple[np.ndarray, List[Tuple[int, int]]]:
+    if ContextCiter is None:
+        raise ModuleNotFoundError("context_cite is required for context_cite recompute mode.")
+
+    token_partitioner = TokenContextPartitioner(
+        context=masked_context,
+        tokenizer=hf_tok,
+        ablate_mode="blank",
+    )
+
+    cc = ContextCiter(
+        hf_model,
+        hf_tok,
+        masked_context,
+        query,
+        prompt_template=TF_RAG_TEMPLATE_A2T,
+        partitioner=token_partitioner,
+    )
+
+    scores_cur = np.asarray(cc.get_attributions(), dtype=np.float32)
+    cur_offsets = [(int(s), int(e)) for s, e in token_partitioner._spans]
+
+    if len(scores_cur) != len(cur_offsets):
+        raise ValueError(
+            f"ContextCite scores len={len(scores_cur)} but current ctx spans len={len(cur_offsets)}"
+        )
+
+    return scores_cur, cur_offsets
+
+
+def _at2_token_scores_for_context(
+    *,
+    hf_model,
+    hf_tok,
+    masked_context: str,
+    query: str,
+    score_estimator_path,
+    generate_kwargs: dict,
+) -> Tuple[np.ndarray, List[Tuple[int, int]]]:
+    scores_cur, _gen, sources = get_at2_token_scores(
+        full_context=masked_context,
+        query=query,
+        hf_model=hf_model,
+        hf_tok=hf_tok,
+        score_estimator_path=score_estimator_path,
+        generate_kwargs=generate_kwargs,
+    )
+    scores_cur = np.asarray(scores_cur, dtype=np.float32)
+    _, cur_offsets = tokenize_context_with_offsets(masked_context, hf_tok)
+    scores_token = map_at2_scores_to_base_via_sources(
+        context=masked_context,
+        source_pieces=sources,
+        scores=scores_cur,
+        base_offsets=cur_offsets,
+        max_lookahead=64,
+        max_merge_pieces=4,
+        whitespace_flex=True,
+    )
+    return scores_token.astype(np.float32, copy=False), cur_offsets
+
+
 def _contextcite_scores_mapped_to_base(
     *,
     hf_model,
@@ -514,6 +774,10 @@ def mask_by_order_recompute(
     save_logs:bool=True,stop_on_flip:bool=False,
     checkpoint_path: Optional[str] = None,
     checkpoint_every: int = 25,
+    intervention_mode: InterventionMode | str = InterventionMode.MASK_TOKEN,
+    replacement_map: Optional[Mapping[Any, str]] = None,
+    replacement_resolver: Optional[ReplacementResolver] = None,
+    model_id: Optional[str] = None,
 ):
     """
     Adaptive greedy masking:
@@ -531,8 +795,68 @@ def mask_by_order_recompute(
     if score_mode in ("context_cite", "at2"):
         prompt_template = ChatPromptTemplate.from_template(TF_RAG_TEMPLATE_A2T)
 
+    mode = coerce_intervention_mode(intervention_mode)
     _, base_offsets = tokenize_context_with_offsets(full_context, hf_tok)
-    n = len(base_offsets)
+    pieces = None
+    word_units = None
+    original_word_offsets: Optional[List[Tuple[int, int]]] = None
+    candidate_word_ids: Optional[List[int]] = None
+    excluded_units: List[Dict[str, Any]] = []
+    candidate_filter: Dict[str, Any] = {
+        "replacement_semex_filter_enabled": False,
+        "excluded_candidates": 0,
+    }
+
+    if mode == InterventionMode.MASK_TOKEN:
+        n = len(base_offsets)
+    else:
+        pieces, word_units = split_context_to_word_units(full_context)
+        original_word_offsets = [(int(u.start), int(u.end)) for u in word_units]
+        candidate_word_ids = [int(u.word) for u in word_units]
+        n = len(word_units)
+
+        if mode in {
+            InterventionMode.REPLACEMENT_NEUTRAL_WORD,
+            InterventionMode.REPLACEMENT_ANTONYM_WORD,
+        }:
+            semex_filter_enabled = bool(getattr(replacement_resolver, "semex_filter_enabled", True))
+            candidate_filter["replacement_semex_filter_enabled"] = semex_filter_enabled
+            if semex_filter_enabled:
+                candidate_word_ids, _scores, semex_excluded, semex_meta = filter_replacement_order_semex(
+                    context=full_context,
+                    word_units=word_units,
+                    ordered_word_ids=candidate_word_ids,
+                    pick_scores=None,
+                    spacy_model=str(getattr(replacement_resolver, "semex_spacy_model", "en_core_web_sm")),
+                )
+                excluded_units.extend(semex_excluded)
+                candidate_filter.update(semex_meta)
+
+            replacement_map = build_replacement_map_for_order(
+                context=full_context,
+                query=query,
+                word_units=word_units,
+                ordered_word_ids=candidate_word_ids,
+                mode=mode,
+                replacement_map=replacement_map,
+                resolver=replacement_resolver,
+                hf_model=hf_model,
+                hf_tok=hf_tok,
+                hf_device=hf_device,
+                model_id=model_id,
+            )
+
+        candidate_word_ids, _scores, availability_excluded = _filter_word_order_by_available_intervention(
+            word_units=word_units,
+            order=candidate_word_ids,
+            pick_scores=None,
+            mode=mode,
+            replacement_map=replacement_map,
+            return_exclusions=True,
+        )
+        excluded_units.extend(availability_excluded)
+        candidate_filter["excluded_candidates"] = int(len(excluded_units))
+        candidate_filter["available_candidates"] = int(len(candidate_word_ids))
 
     if max_steps is None:
         max_steps = n
@@ -564,6 +888,7 @@ def mask_by_order_recompute(
 
         _write_masking_checkpoint(checkpoint_path,
             {"status": status,"stage": stage,"score_mode": score_mode,
+                "intervention_mode": mode.name,
                 "query": query,"p_true_flipping": bool(p_true_flipping),
                 "masking_iteration": int(masking_iteration),
                 "max_steps": int(max_steps),"num_base_tokens": int(n),"steps_selected": int(len(order)),
@@ -571,6 +896,8 @@ def mask_by_order_recompute(
                 "pending_prompts": int(len(pending_prompts)) if stop_on_flip else 0,
                 "order": [int(x) for x in order],
                 "scores_at_pick": [float(x) for x in scores_at_pick],
+                "excluded_units": excluded_units,
+                "candidate_filter": candidate_filter,
                 "masked_stats": streamed_stats if stop_on_flip else [],
                 "masked_logps": streamed_logps if stop_on_flip else [],
             },
@@ -579,57 +906,134 @@ def mask_by_order_recompute(
     save_recompute_checkpoint("started", "recompute_start")
 
     while len(order) < max_steps and keep_running:
-        cur_context = mask_context_spans_same_length(full_context, masked_spans)
+        if mode == InterventionMode.MASK_TOKEN:
+            cur_context = mask_context_spans_same_length(full_context, masked_spans)
 
-        if score_mode == "attention":
-            scores_base = _attention_scores_mapped_to_base(
-                hf_model=hf_model,
-                hf_tok=hf_tok,
-                hf_device=hf_device,
-                prompt_template=prompt_template,
-                masked_context=cur_context,
-                query=query,
-                base_offsets=base_offsets,
-            )
-        elif score_mode=="attention_flow":
-            scores_base , attention_flow_mode = _attention_flow_scores_mapped_to_base(
-                hf_model=hf_model,
-                hf_tok=hf_tok,
-                hf_device=hf_device,
-                prompt_template=prompt_template,
-                masked_context=cur_context,
-                query=query,
-                base_offsets=base_offsets,
-            )
+            if score_mode == "attention":
+                scores_base = _attention_scores_mapped_to_base(
+                    hf_model=hf_model,
+                    hf_tok=hf_tok,
+                    hf_device=hf_device,
+                    prompt_template=prompt_template,
+                    masked_context=cur_context,
+                    query=query,
+                    base_offsets=base_offsets,
+                )
+            elif score_mode=="attention_flow":
+                scores_base , attention_flow_mode = _attention_flow_scores_mapped_to_base(
+                    hf_model=hf_model,
+                    hf_tok=hf_tok,
+                    hf_device=hf_device,
+                    prompt_template=prompt_template,
+                    masked_context=cur_context,
+                    query=query,
+                    base_offsets=base_offsets,
+                )
 
-        elif score_mode == "context_cite":
-            scores_base = _contextcite_scores_mapped_to_base(
-                hf_model=hf_model,
-                hf_tok=hf_tok,
-                masked_context=cur_context,
-                query=query,
-                base_offsets=base_offsets,
-            )
-        elif score_mode == "at2":
-            scores_base = _at2_scores_mapped_to_base(
-                hf_model=hf_model,
-                hf_tok=hf_tok,
-                masked_context=cur_context,
-                query=query,
-                base_offsets=base_offsets,
-                score_estimator_path=score_estimator_path,
-                generate_kwargs=generate_kwargs or {
-                    "max_new_tokens": 128,
-                    "do_sample": False,
-                },
-            )
+            elif score_mode == "context_cite":
+                scores_base = _contextcite_scores_mapped_to_base(
+                    hf_model=hf_model,
+                    hf_tok=hf_tok,
+                    masked_context=cur_context,
+                    query=query,
+                    base_offsets=base_offsets,
+                )
+            elif score_mode == "at2":
+                scores_base = _at2_scores_mapped_to_base(
+                    hf_model=hf_model,
+                    hf_tok=hf_tok,
+                    masked_context=cur_context,
+                    query=query,
+                    base_offsets=base_offsets,
+                    score_estimator_path=score_estimator_path,
+                    generate_kwargs=generate_kwargs or {
+                        "max_new_tokens": 128,
+                        "do_sample": False,
+                    },
+                )
+            else:
+                raise ValueError(
+                    f"Unknown score_mode={score_mode}. Use 'attention', 'attention_flow', 'context_cite', or 'at2'."
+                )
         else:
-            raise ValueError(
-                f"Unknown score_mode={score_mode}. Use 'attention', 'context_cite', or 'at2'."
+            if pieces is None or word_units is None:
+                raise RuntimeError("Word intervention mode was selected without word units.")
+
+            cur_context, current_word_offsets = _build_word_intervention_context_and_offsets(
+                pieces=pieces,
+                word_units=word_units,
+                selected_word_ids=order,
+                mode=mode,
+                replacement_map=replacement_map,
             )
+
+            if score_mode == "attention":
+                token_scores, token_offsets = _attention_token_scores_for_context(
+                    hf_model=hf_model,
+                    hf_tok=hf_tok,
+                    hf_device=hf_device,
+                    prompt_template=prompt_template,
+                    masked_context=cur_context,
+                    query=query,
+                )
+                scores_base = _aggregate_token_scores_to_spans(
+                    target_offsets=current_word_offsets,
+                    token_offsets=token_offsets,
+                    token_scores=token_scores,
+                    reduction="sum",
+                )
+            elif score_mode == "attention_flow":
+                scores_base, attention_flow_mode = _attention_flow_scores_mapped_to_base(
+                    hf_model=hf_model,
+                    hf_tok=hf_tok,
+                    hf_device=hf_device,
+                    prompt_template=prompt_template,
+                    masked_context=cur_context,
+                    query=query,
+                    base_offsets=current_word_offsets,
+                )
+            elif score_mode == "context_cite":
+                token_scores, token_offsets = _contextcite_token_scores_for_context(
+                    hf_model=hf_model,
+                    hf_tok=hf_tok,
+                    masked_context=cur_context,
+                    query=query,
+                )
+                scores_base = _aggregate_token_scores_to_spans(
+                    target_offsets=current_word_offsets,
+                    token_offsets=token_offsets,
+                    token_scores=token_scores,
+                    reduction="sum",
+                )
+            elif score_mode == "at2":
+                token_scores, token_offsets = _at2_token_scores_for_context(
+                    hf_model=hf_model,
+                    hf_tok=hf_tok,
+                    masked_context=cur_context,
+                    query=query,
+                    score_estimator_path=score_estimator_path,
+                    generate_kwargs=generate_kwargs or {
+                        "max_new_tokens": 128,
+                        "do_sample": False,
+                    },
+                )
+                scores_base = _aggregate_token_scores_to_spans(
+                    target_offsets=current_word_offsets,
+                    token_offsets=token_offsets,
+                    token_scores=token_scores,
+                    reduction="sum",
+                )
+            else:
+                raise ValueError(
+                    f"Unknown score_mode={score_mode}. Use 'attention', 'attention_flow', 'context_cite', or 'at2'."
+                )
 
         scores_base = scores_base.astype(np.float32, copy=False)
         scores_base[masked_flags] = -np.inf
+        if candidate_word_ids is not None:
+            unavailable = np.ones(n, dtype=bool)
+            unavailable[np.asarray(candidate_word_ids, dtype=np.int64)] = False
+            scores_base[unavailable] = -np.inf
 
         remaining_budget = max_steps - len(order)
         if remaining_budget <= 0:
@@ -660,9 +1064,19 @@ def mask_by_order_recompute(
             masked_flags[pick] = True
             order.append(pick)
             scores_at_pick.append(pick_score)
-            masked_spans.append(base_offsets[pick])
-
-            new_context = mask_context_spans_same_length(full_context, masked_spans)
+            if mode == InterventionMode.MASK_TOKEN:
+                masked_spans.append(base_offsets[pick])
+                new_context = mask_context_spans_same_length(full_context, masked_spans)
+            else:
+                if pieces is None or word_units is None:
+                    raise RuntimeError("Word intervention mode was selected without word units.")
+                new_context, _current_word_offsets = _build_word_intervention_context_and_offsets(
+                    pieces=pieces,
+                    word_units=word_units,
+                    selected_word_ids=order,
+                    mode=mode,
+                    replacement_map=replacement_map,
+                )
 
             if score_mode in ("context_cite", "at2"):
                 new_prompt = prompt_template.format(context=new_context, query=query)
@@ -763,12 +1177,15 @@ def mask_by_order_recompute(
 
     if save_logs and log_path is not None:
         os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
+        log_offsets = base_offsets
+        if mode != InterventionMode.MASK_TOKEN:
+            log_offsets = original_word_offsets or []
         _write_adaptive_log(
             log_path,
-            title=f"Adaptive greedy masking (recompute each {masking_iteration} step/s)",
+            title=f"Adaptive greedy masking (recompute each {masking_iteration} step/s, {mode.name})",
             query=query,
             full_context=full_context,
-            base_offsets=base_offsets,
+            base_offsets=log_offsets,
             order=order,
             scores_at_pick=scores_at_pick,
             masked_stats=masked_stats,
@@ -781,6 +1198,7 @@ def mask_by_order_recompute(
                 "status": "completed",
                 "stage": "recompute_completed",
                 "score_mode": score_mode,
+                "intervention_mode": mode.name,
                 "query": query,
                 "p_true_flipping": bool(p_true_flipping),
                 "masking_iteration": int(masking_iteration),
@@ -790,6 +1208,8 @@ def mask_by_order_recompute(
                 "steps_scored": int(len(masked_stats)),
                 "order": [int(x) for x in order],
                 "scores_at_pick": [float(x) for x in scores_at_pick],
+                "excluded_units": excluded_units,
+                "candidate_filter": candidate_filter,
                 "masked_stats": masked_stats,
                 "masked_logps": masked_logps,
             },

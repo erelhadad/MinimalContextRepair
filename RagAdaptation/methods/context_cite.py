@@ -17,7 +17,7 @@ from RagAdaptation.core.model_config import ModelConfig
 from RagAdaptation.core.prompting import InterventionMode, coerce_intervention_mode
 
 def run_context_cite_method(*,model_con:ModelConfig, out_dir: str, baseline_stats, full_context: str, query: str, p_true_flipping: bool, dump_policy: str, dump_window: int,
-                         save_logs:bool=True, stop_on_flip:bool=False,intervention_mode=None,replacement_resolver=None   ):
+                         save_logs:bool=True, save_plots: bool=False, stop_on_flip:bool=False,intervention_mode=None,replacement_resolver=None   ):
     if ContextCiter is None:
         raise ModuleNotFoundError("context_cite is required for the context_cite method.")
 
@@ -48,9 +48,9 @@ def run_context_cite_method(*,model_con:ModelConfig, out_dir: str, baseline_stat
             full_context,
             query,model_con=model_con,
             scores=raw_results,
-            compute_probs_file_name=str(method_path / "compute_probs.txt"),
+            compute_probs_file_name=str(method_path / "flip_log.txt"),
             p_true_flipping=p_true_flipping,
-            dump_json_path=str(method_path / "dump.json"),
+            dump_json_path=str(method_path / "mask_trace.json"),
             dump_policy=dump_policy,
             dump_window=dump_window,
             source_offsets=contextcite_offsets,
@@ -59,7 +59,7 @@ def run_context_cite_method(*,model_con:ModelConfig, out_dir: str, baseline_stat
             intervention_mode=mode,
             replacement_resolver=replacement_resolver,
         )
-    if save_logs:
+    if save_plots:
         with timer.section("plot"):
             create_p_true_function(masked_logps, out_dir=str(plots_dir(out_dir)), filename="context_cite_p_true.png")
     return {"masked_stats": masked_stats, "masked_logps": masked_logps, "timing": timer.to_dict()}

@@ -65,16 +65,30 @@ def create_run_root(output_root: str | Path, run_name: str | None = None) -> Pat
     return ensure_dir(root)
 
 
-def example_dir(run_root: str | Path, ex_idx: int) -> Path:
-    return ensure_dir(Path(run_root) / "examples" / f"ex{ex_idx:04d}")
+def example_dir(run_root: str | Path, ex_idx: int, *, layout: str = "simple") -> Path:
+    if layout == "nested":
+        return ensure_dir(Path(run_root) / "examples" / f"ex{ex_idx:04d}")
+    return ensure_dir(Path(run_root) / f"ex{ex_idx:04d}")
 
 
-def model_dir(example_dir_path: str | Path, model_id: str) -> Path:
-    return ensure_dir(Path(example_dir_path) / "models" / sanitize_name(model_id))
+def model_dir(
+    example_dir_path: str | Path,
+    model_id: str,
+    *,
+    layout: str = "simple",
+    include_model_dir: bool = True,
+) -> Path:
+    base = Path(example_dir_path)
+    if not include_model_dir:
+        return ensure_dir(base)
+    if layout == "nested":
+        return ensure_dir(base / "models" / sanitize_name(model_id))
+    return ensure_dir(base / sanitize_name(model_id))
 
 
-def write_manifest(run_root: str | Path, manifest: dict[str, Any]) -> Path:
-    return write_json(Path(run_root) / "manifest.json", manifest)
+def write_manifest(run_root: str | Path, manifest: dict[str, Any], *, run_id: str | None = None) -> Path:
+    name = f"manifest_{sanitize_name(run_id)}.json" if run_id else "manifest.json"
+    return write_json(Path(run_root) / name, manifest)
 
 
 def write_example_inputs(example_dir_path: str | Path, *, example_payload: dict[str, Any], context_text: str) -> None:

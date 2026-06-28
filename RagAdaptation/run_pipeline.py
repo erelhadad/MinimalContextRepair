@@ -17,25 +17,25 @@ newton reports:
 
 /home/erel.hadad/MinimalContextRepair/outputs/reports/dataset_creation/Phi_full_dataset_reports/report_flip_only__microsoft__Phi-3-mini-4k-instruct_with_context_lengths.json
 
-
-
 /home/erel.hadad/MinimalContextRepair/outputs/reports/dataset_creation/Phi_full_dataset_reports/report_flip_only__Qwen__Qwen3-4B-Instruct-2507_with_context_lengths.json
 
-
-
 /home/erel.hadad/MinimalContextRepair/outputs/reports/dataset_creation/Mistral_full_dataset_reports/report_flip_only__mistralai__Mistral-7B-Instruct-v0.3_with_context_lengths.json
+
 
 brit combined word
 
 qwen:  
- python -m RagAdaptation.run_pipeline --input /data/home/erel.hadad/MinimalContextRepair/outputs/reports/dataset_creation/hotpot_yesno__validation__all__full/report_flip_only__Qwen__Qwen3-4B-Instruct-2507.json --out_dir "antonym_replacements/qwen" --running_env "local" --prefer_at2_word_scorer --intervention_mode ANTONYM_WORD --models "Qwen/Qwen3-4B-Instruct-2507" --stop_at_flip --save_logs --methods "attention_combined" "context_cite_combined" "at2_combined" --examples_range 0 200 --disable_replacement_semex_filter
+ python -m RagAdaptation.run_pipeline --input /data/home/erel.hadad/MinimalContextRepair/outputs/reports/dataset_creation/hotpot_yesno__validation__all__full/report_flip_only__Qwen__Qwen3-4B-Instruct-2507.json --out_dir "antonym_replacements/opt/qwen_4" --running_env "local" --prefer_at2_word_scorer --intervention_mode ANTONYM_WORD --models "Qwen/Qwen3-4B-Instruct-2507" --stop_at_flip --save_logs  --methods "at2_combined"  --examples_range 41 44 --tau 0.1 --epsilon 0.5 --k 5 
 
 minstral: 
- python -m RagAdaptation.run_pipeline --models "mistralai/Mistral-7B-Instruct-v0.3" --methods "attention_combined" "context_cite_combined" "at2_combined" --save_logs --stop_at_flip --out_dir "antonym_replacements/mins" --input  /data/home/erel.hadad/MinimalContextRepair/outputs/reports/dataset_creation/hotpot_yesno__validation__all__full/report_flip_only__mistralai__Mistral-7B-Instruct-v0.3.json  --running_env "local" --prefer_at2_word_scorer --intervention_mode ANTONYM_WORD  --examples_range 0 200 --disable_replacement_semex_filter
+ python -m RagAdaptation.run_pipeline --models "mistralai/Mistral-7B-Instruct-v0.3" --methods "at2_combined" --save_logs --stop_at_flip --out_dir "antonym_replacements/opt/mistral_0.1_0.7_4" --input  /data/home/erel.hadad/MinimalContextRepair/outputs/reports/dataset_creation/hotpot_yesno__validation__all__full/report_flip_only__mistralai__Mistral-7B-Instruct-v0.3.json  --running_env "local" --prefer_at2_word_scorer --intervention_mode ANTONYM_WORD  --examples_range 66 100 --tau 0.1 --epsilon 0.7 --k 4
 
 micro:
- python -m RagAdaptation.run_pipeline --models microsoft/Phi-3-mini-4k-instruct --methods "attention_combined" "context_cite_combined" "at2_combined" --save_logs --stop_at_flip --out_dir "antonym_replacements/micro" --input /data/home/erel.hadad/MinimalContextRepair/outputs/reports/dataset_creation/hotpot_yesno__validation__all__full/report_flip_only__microsoft__Phi-3-mini-4k-instruct.json --running_env "local" --prefer_at2_word_scorer --intervention_mode mask_token --examples_range 0 10 
+ python -m RagAdaptation.run_pipeline --models microsoft/Phi-3-mini-4k-instruct --methods "at2" "at2_combined" --recompute "at2" --skip_recompute 5  --save_logs --stop_at_flip --out_dir "antonym_replacements/micro_2" --input 
+ /data/home/erel.hadad/MinimalContextRepair/outputs/reports/dataset_creation/hotpot_yesno__validation__all__full/report_flip_only__microsoft__Phi-3-mini-4k-instruct.json --running_env "local" --prefer_at2_word_scorer --intervention_mode ANTONYM_WORD --examples_range 0 140 
 
+
+ python -m RagAdaptation.run_pipeline --models "mistralai/Mistral-7B-Instruct-v0.3" --methods "at2"  --recompute "at2" --skip_recompute 5  --save_logs --stop_at_flip --out_dir "outputs/opt_combined/minstral" --input  /data/home/erel.hadad/MinimalContextRepair/outputs/reports/dataset_creation/hotpot_yesno__validation__all__full/report_flip_only__mistralai__Mistral-7B-Instruct-v0.3.json  --running_env "local" --intervention_mode mask_token  --examples_range 0 200 --disable_replacement_semex_filter
 
 '''
 
@@ -56,7 +56,9 @@ def main():
     ap.add_argument("--skip_recompute",nargs="*", type=int, default=[])
     ap.add_argument("--skip_examples", nargs="*", type=int, default=[])
     ap.add_argument("--save_logs",  action="store_true")
+    ap.add_argument("--save_plots", action="store_true")
     ap.add_argument("--stop_at_flip", action="store_true")
+    ap.add_argument("--output_layout", choices=["simple", "nested"], default="simple")
     ap.add_argument("--examples_range", nargs=2, type=int,help="Range of examples to run")
     ap.add_argument("--tau",type=float, default=0.01)
     ap.add_argument("--epsilon",type=float, default=0.6)
@@ -64,15 +66,16 @@ def main():
     ap.add_argument("--intervention_mode", type=str, default="mask_token")
     ap.add_argument("--use_yes_no_variants", action="store_true")
     ap.add_argument("--replacement_cache", type=str, default=str(CACHE_DIR / "replacement_cache.json"))
-    ap.add_argument("--neutral_model", type=str, default="gpt-4o-mini")
+    # Backward-compatible no-op. Neutral replacements always use the model in --models.
+    ap.add_argument("--neutral_model", default=None, help=argparse.SUPPRESS)
     ap.add_argument("--conceptnet_min_weight", type=float, default=1.0)
     ap.add_argument("--disable_replacement_semex_filter", action="store_true")
-    ap.add_argument("--replacement_semex_spacy_model", type=str, default="en_core_web_sm")
+    ap.add_argument("--replacement_semex_spacy_model", type=str, default="en_core_web_sm",help="If the semex filter is off: the flag is ignored.")
     ap.add_argument("--prefer_at2_word_scorer", action="store_true")
     ap.add_argument("--running_env", type=str, default="local")
-    ap.add_argument("--max_scoring_prompt_batch_size", type=int)
-    ap.add_argument("--scoring_row_batch_size", type=int)
-    ap.add_argument("--streaming_chunk_size", type=int, default=32)
+    ap.add_argument("--max_scoring_prompt_batch_size", type=int, help=" how many of those prompts compute_probs scores together internally.")
+    ap.add_argument("--scoring_row_batch_size", type=int, default=8) #prompts cross true/false variants, so row batch size is often the real GPU memory limiter
+    ap.add_argument("--streaming_chunk_size", type=int, default=32, help="How many masked prompts we create and hand to compute_probs at a time.")
     ap.add_argument("--cleanup_every_batches", type=int, default=0)
     ap.add_argument("--aggressive_cleanup", action="store_true")
     ap.add_argument("--unload_models_between_runs", action="store_true")
@@ -90,7 +93,9 @@ def main():
         skip_example_indices=list(args.skip_examples),
         skip_recompute=args.skip_recompute,
         save_logs=args.save_logs,
+        save_plots=args.save_plots,
         stop_at_flip=args.stop_at_flip,
+        output_layout=args.output_layout,
         examples_range=args.examples_range,
         tau=args.tau
         ,epsilon=args.epsilon,
@@ -98,7 +103,6 @@ def main():
         intervention_mode=args.intervention_mode,
         use_yes_no_variants=args.use_yes_no_variants,
         replacement_cache=Path(args.replacement_cache),
-        neutral_model=args.neutral_model,
         conceptnet_min_weight=args.conceptnet_min_weight,
         replacement_semex_filter=not args.disable_replacement_semex_filter,
         replacement_semex_spacy_model=args.replacement_semex_spacy_model,

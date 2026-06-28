@@ -45,8 +45,8 @@ _DEFAULT_COMBINED_EPSILON = 0.6
 _DEFAULT_COMBINED_TAU = 0.01
 
 
-def _finalize_method_result(*, method_name: str, out_dir: str, masked_logps, payload: Dict[str, Any], save_logs=False):
-    if save_logs:
+def _finalize_method_result(*, method_name: str, out_dir: str, masked_logps, payload: Dict[str, Any], save_plots=False):
+    if save_plots:
         create_p_true_function(masked_logps, out_dir=str(plots_dir(out_dir)), filename=f"{method_name}_p_true.png")
     return payload
 
@@ -94,6 +94,7 @@ def run_attention_combined_method(
     dump_policy: str,
     dump_window: int,
     save_logs: bool = True,
+    save_plots: bool = False,
     stop_on_flip: bool = False,
     k: int = _DEFAULT_COMBINED_K,
     epsilon: float = _DEFAULT_COMBINED_EPSILON,
@@ -190,9 +191,9 @@ def run_attention_combined_method(
             query,
             model_con=model_con,
             scores=scores,
-            compute_probs_file_name=str(method_path / "compute_probs.txt"),
+            compute_probs_file_name=str(method_path / "flip_log.txt"),
             p_true_flipping=p_true_flipping,
-            dump_json_path=str(method_path / "dump.json"),
+            dump_json_path=str(method_path / "mask_trace.json"),
             dump_policy=dump_policy,
             dump_window=dump_window,
             source_offsets=source_offsets,
@@ -226,7 +227,7 @@ def run_attention_combined_method(
             "candidate_filter": candidate_filter,
             "timing": timer.to_dict(),
         },
-        save_logs=save_logs,
+        save_plots=save_plots,
     )
 
 
@@ -241,6 +242,7 @@ def run_context_cite_combined_method(
     dump_policy: str,
     dump_window: int,
     save_logs: bool = True,
+    save_plots: bool = False,
     stop_on_flip: bool = False,
     k: int = _DEFAULT_COMBINED_K,
     epsilon: float = _DEFAULT_COMBINED_EPSILON,
@@ -312,9 +314,9 @@ def run_context_cite_combined_method(
             query,
             model_con=model_con,
             scores=raw_results,
-            compute_probs_file_name=str(method_path / "compute_probs.txt"),
+            compute_probs_file_name=str(method_path / "flip_log.txt"),
             p_true_flipping=p_true_flipping,
-            dump_json_path=str(method_path / "dump.json"),
+            dump_json_path=str(method_path / "mask_trace.json"),
             dump_policy=dump_policy,
             dump_window=dump_window,
             source_offsets=contextcite_offsets,
@@ -348,7 +350,7 @@ def run_context_cite_combined_method(
             "candidate_filter": candidate_filter,
             "timing": timer.to_dict(),
         },
-        save_logs=save_logs,
+        save_plots=save_plots,
     )
 
 
@@ -364,6 +366,7 @@ def run_at2_combined_method(
     dump_policy: str,
     dump_window: int,
     save_logs: bool = True,
+    save_plots: bool = False,
     stop_on_flip: bool = False,
     k: int = _DEFAULT_COMBINED_K,
     epsilon: float = _DEFAULT_COMBINED_EPSILON,
@@ -398,7 +401,7 @@ def run_at2_combined_method(
     if save_logs:
         with timer.section("write_logs"):
             write_json(
-                method_path / f"unit_scores_{mode.name}.json",
+                method_path / "scores.json",
                 {
                     "model": model_id,
                     "estimator": str(est_path),
@@ -507,9 +510,9 @@ def run_at2_combined_method(
             query,
             model_con=model_con,
             scores=scores_base,
-            compute_probs_file_name=str(method_path / "compute_probs.txt"),
+            compute_probs_file_name=str(method_path / "flip_log.txt"),
             p_true_flipping=p_true_flipping,
-            dump_json_path=str(method_path / "dump.json"),
+            dump_json_path=str(method_path / "mask_trace.json"),
             dump_policy=dump_policy,
             dump_window=dump_window,
             source_offsets=base_offsets,
@@ -546,5 +549,5 @@ def run_at2_combined_method(
             "candidate_filter": candidate_filter,
             "timing": timer.to_dict(),
         },
-        save_logs=save_logs,
+        save_plots=save_plots,
     )

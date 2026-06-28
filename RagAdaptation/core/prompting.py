@@ -345,8 +345,11 @@ def _filter_word_order_by_available_intervention(*,word_units: Sequence[WordUnit
 def build_context_with_word_interventions(*,pieces: Sequence[str],word_units: Sequence[WordUnit],selected_word_ids: Set[int],
     mode: InterventionMode,replacement_map: Optional[Mapping[Any, str]] = None,) -> str:
     """
-    Build a new context from stable pieces.
-
+    Build a new context from stable pieces. The slected_word_ids are replaced according to the intervention mode.
+    The replacement_map is used for replacement modes.
+    The pieces are stable and do not change length, so the output context is always the same
+    length as the input context. This is important for scoring and alignment.
+    The word_units are used to map the selected_word_ids to the pieces. Unselected words are left unchanged.
     This never uses post-replacement character offsets.
     """
     mode = coerce_intervention_mode(mode)

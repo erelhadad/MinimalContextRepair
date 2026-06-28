@@ -42,8 +42,9 @@ def _is_cuda_oom(e: BaseException) -> bool:
 def _cleanup_after_oom()-> None:
     cleanup_memory()
 
-def build_manifest(config: PipelineConfig, items_count: int) -> dict[str, Any]:
+def build_manifest(config: PipelineConfig, items_count: int, *, run_id: str) -> dict[str, Any]:
     return {
+        "run_id": run_id,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "input_path": str(config.input_path),
         "output_root": str(config.output_root),
@@ -55,14 +56,16 @@ def build_manifest(config: PipelineConfig, items_count: int) -> dict[str, Any]:
         "context_field": config.context_field,
         "skip_example_indices": list(config.skip_example_indices),
         "save_logs":config.save_logs,
+        "save_plots": config.save_plots,
         "stop_at_flip":config.stop_at_flip,
+        "output_layout": config.output_layout,
         "examples_range":config.examples_range,
         "tau":config.tau,
         "epsilon":config.epsilon,
         "k":config.k,"intervention_mode":config.intervention_mode,
         "use_yes_no_variants": config.use_yes_no_variants,
         "replacement_cache": str(config.replacement_cache),
-        "neutral_model": config.neutral_model,
+        "replacement_model_source": "pipeline_hf_model",
         "conceptnet_min_weight": config.conceptnet_min_weight,
         "replacement_semex_filter": config.replacement_semex_filter,
         "replacement_semex_spacy_model": config.replacement_semex_spacy_model,
@@ -89,10 +92,13 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
 
     items = load_items(config.input_path)
     run_root = create_run_root(config.output_root)
-    write_manifest(run_root, build_manifest(config, len(items)))
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+    write_manifest(run_root, build_manifest(config, len(items), run_id=run_id), run_id=run_id)
 
     if run_pipeline_fn is None:
         from RagAdaptation.pipeline.experiment import run_full_pipeline as run_pipeline_fn
+
+    simple_single_model = config.output_layout == "simple" and len(config.models) == 1
 
     for ex_i, ex in enumerate(items):
         if ex_i in set(config.skip_example_indices):
@@ -118,7 +124,7 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
         full_context = combine_document_text(docs)
 
 
-        ex_dir = example_dir(run_root, ex_i)
+        ex_dir = example_dir(run_root, ex_i, layout=config.output_layout)
         write_example_inputs(ex_dir, example_payload=ex, context_text=full_context)
 
         for model_id in config.models:
@@ -129,7 +135,12 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
             #meaning are we in the search for flipping from false to true
             detect_flip_to_true = ex["per_model"][model_id]["prob_label_with_context"] == "false"
 
-            mdl_dir = model_dir(ex_dir, model_id)
+            mdl_dir = model_dir(
+                ex_dir,
+                model_id,
+                layout=config.output_layout,
+                include_model_dir=not simple_single_model,
+            )
             try:
                 run_pipeline_fn(
                     model_id=model_id,
@@ -144,13 +155,13 @@ def run_dataset(config: PipelineConfig, *, run_pipeline_fn: Callable[..., str] |
                     recompute=config.recompute,
                     skip_recompute=config.skip_recompute,
                     save_logs=config.save_logs,
+                    save_plots=config.save_plots,
                     stop_on_flip=config.stop_at_flip,
                     tau=config.tau,
                     epsilon=config.epsilon,
                     k=config.k,
                     intervention_mode=intervention_mode,
                     replacement_cache=str(config.replacement_cache),
-                    neutral_model=config.neutral_model,
                     conceptnet_min_weight=config.conceptnet_min_weight,
                     replacement_semex_filter=config.replacement_semex_filter,
                     replacement_semex_spacy_model=config.replacement_semex_spacy_model,

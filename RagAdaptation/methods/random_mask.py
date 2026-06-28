@@ -9,7 +9,7 @@ from RagAdaptation.core.timing import TimingRecorder
 from RagAdaptation.methods.common import mask_by_order
 from RagAdaptation.core.model_config import ModelConfig
 
-def run_random_method(*,model_con:ModelConfig, out_dir: str, baseline_stats, full_context: str, query: str, seeds: list[int], p_true_flipping: bool, dump_policy: str, dump_window: int, save_logs:bool=True, stop_on_flip:bool=False,
+def run_random_method(*,model_con:ModelConfig, out_dir: str, baseline_stats, full_context: str, query: str, seeds: list[int], p_true_flipping: bool, dump_policy: str, dump_window: int, save_logs:bool=True, save_plots: bool=False, stop_on_flip:bool=False,
                       intervention_mode=None,replacement_resolver=None):
     results = {}
     for seed in seeds:
@@ -24,9 +24,9 @@ def run_random_method(*,model_con:ModelConfig, out_dir: str, baseline_stats, ful
                 model_con=model_con,
                 scores=None,
                 rng=rng,
-                compute_probs_file_name=str(method_path / "compute_probs.txt"),
+                compute_probs_file_name=str(method_path / "flip_log.txt"),
                 p_true_flipping=p_true_flipping,
-                dump_json_path=str(method_path / "dump.json"),
+                dump_json_path=str(method_path / "mask_trace.json"),
                 dump_policy=dump_policy,
                 dump_window=dump_window,
                 baseline_stats=baseline_stats,

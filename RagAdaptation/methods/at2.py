@@ -173,6 +173,7 @@ def run_at2_method(
     dump_policy: str,
     dump_window: int,
     save_logs: bool = True,
+    save_plots: bool = False,
     stop_on_flip: bool = False,
     intervention_mode=None,
     replacement_resolver=None,
@@ -210,7 +211,7 @@ def run_at2_method(
             ]
 
             write_json(
-                method_path / "token_scores.json",
+                method_path / "scores.json",
                 {
                     "model": model_id,
                     "estimator": str(est_path),
@@ -226,9 +227,9 @@ def run_at2_method(
         query,
         model_con=model_con,
         scores=scores_base,
-        compute_probs_file_name=str(method_path / "compute_probs.txt"),
+        compute_probs_file_name=str(method_path / "flip_log.txt"),
         p_true_flipping=p_true_flipping,
-        dump_json_path=str(method_path / "dump.json"),
+        dump_json_path=str(method_path / "mask_trace.json"),
         dump_policy=dump_policy,
         dump_window=dump_window,
         source_offsets=base_offsets,
@@ -240,12 +241,13 @@ def run_at2_method(
         replacement_resolver=replacement_resolver,
     )
 
-    with timer.section("plot"):
-        create_p_true_function(
-            masked_logps,
-            out_dir=str(plots_dir(out_dir)),
-            filename="at2_p_true.png",
-        )
+    if save_plots:
+        with timer.section("plot"):
+            create_p_true_function(
+                masked_logps,
+                out_dir=str(plots_dir(out_dir)),
+                filename="at2_p_true.png",
+            )
 
     return {
         "generation_init": gen,
